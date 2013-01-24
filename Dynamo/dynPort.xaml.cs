@@ -109,7 +109,6 @@ namespace Dynamo.Connectors
 
          this.MouseEnter += delegate { foreach (var c in connectors) c.Highlight(); };
          this.MouseLeave += delegate { foreach (var c in connectors) c.Unhighlight(); };
-
       }
       #endregion constructors
 

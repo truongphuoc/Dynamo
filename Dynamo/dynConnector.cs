@@ -20,6 +20,7 @@ using System.Windows.Shapes;
 using Dynamo.Elements;
 using Dynamo.Utilities;
 using System.Collections.Generic;
+using Dynamo.FSchemeInterop;
 
 namespace Dynamo.Connectors
 {
@@ -418,20 +419,52 @@ namespace Dynamo.Connectors
          //        return false;
          //    }
          //}
-
-         //turn the line solid
-         connector.StrokeDashArray.Clear();
-         plineConnector.StrokeDashArray.Clear();
-         pEnd = p;
-
-         if (pEnd != null)
+         
+         // Test if the start port's owner is sending out a list.
+         // If so, offer to create a map node
+         if (this.Start.Owner.GetType() == typeof(dynList))
          {
-            //set the start and end values to equal so this 
-            //starts evaulating immediately
-            //pEnd.Owner.InPortData[p.Index].Object = pStart.Owner.OutPortData.Object;
-            p.Connect(this);
-            pEnd.Update();
-            pEnd.Owner.Update();
+             double x = Canvas.GetLeft(this.Start.Owner);
+             double y = Canvas.GetTop(this.Start.Owner);
+             dynNode mapNode = dynElementSettings.SharedInstance.Bench.AddDynElement(typeof(dynMap), "map", Guid.NewGuid(), x + this.Start.Owner.Width + 20, y + this.Start.Owner.Height + 20, dynElementSettings.SharedInstance.Bench.CurrentSpace);
+
+             //connect the list to the map       
+             //dynConnector mapConnector = new dynConnector(this.Start.Owner, mapNode, 0, 1, 0);
+
+             // connect the node we were going to connect to here
+             // to the map
+             dynConnector listConnector = new dynConnector(p.Owner, mapNode, 0, 0, 0);
+
+             //turn the line solid
+             connector.StrokeDashArray.Clear();
+             plineConnector.StrokeDashArray.Clear();
+             pEnd = mapNode.InPorts[1];
+
+             if (pEnd != null)
+             {
+                 mapNode.InPorts[1].Connect(this);
+                 pEnd.Update();
+                 pEnd.Owner.Update();
+             }
+             
+         }
+         else
+         {
+
+             //turn the line solid
+             connector.StrokeDashArray.Clear();
+             plineConnector.StrokeDashArray.Clear();
+             pEnd = p;
+
+             if (pEnd != null)
+             {
+                 //set the start and end values to equal so this 
+                 //starts evaulating immediately
+                 //pEnd.Owner.InPortData[p.Index].Object = pStart.Owner.OutPortData.Object;
+                 p.Connect(this);
+                 pEnd.Update();
+                 pEnd.Owner.Update();
+             }
          }
 
          return true;
