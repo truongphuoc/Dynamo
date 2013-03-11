@@ -12,6 +12,8 @@ using System.IO;
 using Dynamo;
 using Dynamo.Utilities;
 
+using Autodesk.ASM;
+
 namespace DynamoSandbox
 {
     class Program
@@ -32,9 +34,14 @@ namespace DynamoSandbox
 
                 SplashScreen splashScreen = null;
                 splashScreen = new SplashScreen(Assembly.GetExecutingAssembly(), "splash.png");
+
+                Autodesk.ASM.State.Start();
+
                 dynamoController = new DynamoController(splashScreen);
                 var bench = dynamoController.Bench;
                 bench.ShowDialog();
+
+                Autodesk.ASM.State.Stop();
             }
             catch (Exception e)
             {

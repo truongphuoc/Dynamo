@@ -14,15 +14,16 @@ using System.Diagnostics;
 using System.Windows.Forms;
 using System.Windows.Input;
 using System.Xml;
-using Dynamo.Connectors;
-
-using Expression = Dynamo.FScheme.Expression;
 using System.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Windows.Media;
+
 using Dynamo.FSchemeInterop.Node;
 using Dynamo.Controls;
 using Dynamo.Commands;
+using Dynamo.Connectors;
+
+using Expression = Dynamo.FScheme.Expression;
 
 namespace Dynamo
 {
@@ -120,6 +121,7 @@ namespace Dynamo
             PopulateSamplesMenu();
 
             Bench.Activated += Bench_Activated;
+
         }
 
         private bool _activated = false;
