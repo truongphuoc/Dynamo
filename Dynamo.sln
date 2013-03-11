@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DynamoLeapMotion", "DynamoL
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DynamoKinect", "DynamoKinect\DynamoKinect.csproj", "{861DA6B9-9483-4F27-B47D-007BD9A428AA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DynamoASM", "DynamoASM\DynamoASM.csproj", "{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}"
+EndProject
 Global
 	GlobalSection(TestCaseManagementSettings) = postSolution
 		CategoryFile = Dynamo.vsmdi
@@ -130,6 +132,16 @@ Global
 		{861DA6B9-9483-4F27-B47D-007BD9A428AA}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{861DA6B9-9483-4F27-B47D-007BD9A428AA}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{861DA6B9-9483-4F27-B47D-007BD9A428AA}.Release|x86.ActiveCfg = Release|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{1D814DD5-39BA-4BAA-B9A1-12688EA9B00C}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
