@@ -53,9 +53,64 @@ namespace Dynamo.Nodes
 
             BSplineCurve s1 = new BSplineCurve(pts.ToArray());
             s1.persist();
-
+            
             //Fin
             return Value.NewContainer(s1);
+        }
+    }
+
+    [NodeName("ASM Vector")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("vector")]
+    public class dynASMVector : dynNodeWithOneOutput
+    {
+        public dynASMVector()
+        {
+            InPortData.Add(new PortData("x", "The x component.", typeof(object)));
+            InPortData.Add(new PortData("y", "The y component.", typeof(object)));
+            InPortData.Add(new PortData("z", "The z component.", typeof(object)));
+            OutPortData.Add(new PortData("v", "The vector.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+        
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            double x = (double)((Value.Number)args[0]).Item;
+            double y = (double)((Value.Number)args[1]).Item;
+            double z = (double)((Value.Number)args[2]).Item;
+
+            Vector v = new Vector(x, y, z);
+
+            //Fin
+            return Value.NewContainer(v);
+        }
+    }
+
+    [NodeName("ASM Surface By Extrusion")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("extrusion")]
+    public class dynASMSurfaceByExtrusion : dynNodeWithOneOutput
+    {
+        public dynASMSurfaceByExtrusion()
+        {
+            InPortData.Add(new PortData("crv", "The curve to extrude.", typeof(object)));
+            InPortData.Add(new PortData("d", "The distance to extrude.", typeof(object)));
+            InPortData.Add(new PortData("v", "The vector along which to extrude.", typeof(object)));
+            OutPortData.Add(new PortData("srf", "The surface of extrusion.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            BSplineCurve s = (BSplineCurve)((Value.Container)args[0]).Item;
+            double d = (double)((Value.Number)args[1]).Item;
+            Vector v = (Vector)((Value.Container)args[2]).Item;
+
+            Surface srf = s.Extrude(v, d) as Surface;
+            srf.persist();
+
+            //Fin
+            return Value.NewContainer(srf);
         }
     }
 }
