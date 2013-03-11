@@ -53,7 +53,7 @@ namespace Dynamo.Nodes
 
             BSplineCurve s1 = new BSplineCurve(pts.ToArray());
             s1.persist();
-            
+
             //Fin
             return Value.NewContainer(s1);
         }
@@ -111,6 +111,34 @@ namespace Dynamo.Nodes
 
             //Fin
             return Value.NewContainer(srf);
+        }
+    }
+
+    [NodeName("ASM Point By Parameter")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("point")]
+    public class dynPointByParamter : dynNodeWithOneOutput
+    {
+        public dynPointByParamter()
+        {
+            InPortData.Add(new PortData("srf", "The surface to evaluate.", typeof(object)));
+            InPortData.Add(new PortData("u", "The u parameter of the point.", typeof(object)));
+            InPortData.Add(new PortData("v", "The v parameter of the point.", typeof(object)));
+            OutPortData.Add(new PortData("pt", "The point.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Surface s = (Surface)((Value.Container)args[0]).Item;
+            double u = (double)((Value.Number)args[1]).Item;
+            double v = (double)((Value.Number)args[2]).Item;
+
+            Point p = s.PointAtParameter(u, v) as Point;
+            p.persist();
+
+            //Fin
+            return Value.NewContainer(p);
         }
     }
 }
