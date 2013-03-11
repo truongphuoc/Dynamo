@@ -52,6 +52,7 @@ namespace Dynamo.Nodes
             pts.Add(new Point(18, 2, 0));
 
             BSplineCurve s1 = new BSplineCurve(pts.ToArray());
+            s1.persist();
 
             //Fin
             return Value.NewContainer(s1);

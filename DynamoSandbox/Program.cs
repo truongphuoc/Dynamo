@@ -36,11 +36,13 @@ namespace DynamoSandbox
                 splashScreen = new SplashScreen(Assembly.GetExecutingAssembly(), "splash.png");
 
                 Autodesk.ASM.State.Start();
+                Autodesk.ASM.State.StartViewer();
 
                 dynamoController = new DynamoController(splashScreen);
                 var bench = dynamoController.Bench;
                 bench.ShowDialog();
 
+                Autodesk.ASM.State.StopViewer();
                 Autodesk.ASM.State.Stop();
             }
             catch (Exception e)
