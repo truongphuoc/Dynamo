@@ -53,7 +53,7 @@ namespace Dynamo.Nodes
 
             BSplineCurve s1 = new BSplineCurve(pts.ToArray());
             s1.persist();
-            
+
             //Fin
             return Value.NewContainer(s1);
         }
@@ -91,6 +91,8 @@ namespace Dynamo.Nodes
     [NodeDescription("extrusion")]
     public class dynASMSurfaceByExtrusion : dynNodeWithOneOutput
     {
+        Surface srf;
+
         public dynASMSurfaceByExtrusion()
         {
             InPortData.Add(new PortData("crv", "The curve to extrude.", typeof(object)));
@@ -102,15 +104,96 @@ namespace Dynamo.Nodes
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            BSplineCurve s = (BSplineCurve)((Value.Container)args[0]).Item;
+            if (srf != null)
+            {
+                srf.unpersist();
+                srf.Dispose();
+                srf = null;
+            }
+
+            BSplineCurve crv = (BSplineCurve)((Value.Container)args[0]).Item;
             double d = (double)((Value.Number)args[1]).Item;
             Vector v = (Vector)((Value.Container)args[2]).Item;
 
-            Surface srf = s.Extrude(v, d) as Surface;
+            srf = crv.Extrude(v, d) as Surface;
             srf.persist();
 
             //Fin
             return Value.NewContainer(srf);
+        }
+    }
+
+    [NodeName("ASM Point By Parameter")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("point")]
+    public class dynPointByParamter : dynNodeWithOneOutput
+    {
+        Point p;
+
+        public dynPointByParamter()
+        {
+            InPortData.Add(new PortData("srf", "The surface to evaluate.", typeof(object)));
+            InPortData.Add(new PortData("u", "The u parameter of the point.", typeof(object)));
+            InPortData.Add(new PortData("v", "The v parameter of the point.", typeof(object)));
+            OutPortData.Add(new PortData("pt", "The point.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            if (p != null)
+            {
+                p.unpersist();
+                p.Dispose();
+                p = null;
+            }
+
+            Surface s = (Surface)((Value.Container)args[0]).Item;
+            double u = (double)((Value.Number)args[1]).Item;
+            double v = (double)((Value.Number)args[2]).Item;
+
+            p = s.PointAtParameter(u, v) as Point;
+            p.persist();
+
+            //Fin
+            return Value.NewContainer(p);
+        }
+    }
+
+    [NodeName("ASM Thicken")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("thicken")]
+    public class dynASMThicken : dynNodeWithOneOutput
+    {
+        Solid solid;
+
+        public dynASMThicken()
+        {
+            InPortData.Add(new PortData("srf", "The surface to evaluate.", typeof(object)));
+            InPortData.Add(new PortData("d", "The thickness.", typeof(object)));
+            InPortData.Add(new PortData("b", "Both sides?.", typeof(object)));
+            OutPortData.Add(new PortData("solid", "The solid.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            if (solid != null)
+            {
+                solid.unpersist();
+                solid.Dispose();
+                solid = null;
+            }
+
+            Surface s = (Surface)((Value.Container)args[0]).Item;
+            double thickness = (double)((Value.Number)args[1]).Item;
+            int bothSides = (int)((Value.Number)args[2]).Item;
+
+            solid = s.Thicken(thickness, Convert.ToBoolean(bothSides)) as Solid;
+            solid.persist();
+
+            //Fin
+            return Value.NewContainer(solid);
         }
     }
 }
