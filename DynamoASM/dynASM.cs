@@ -28,6 +28,75 @@ using Autodesk.DesignScript.Interfaces;
 
 namespace Dynamo.Nodes
 {
+    [NodeName("ASM Translate")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("translate")]
+    public class dynASMTranslate : dynNodeWithOneOutput
+    {
+        Geometry translated;
+
+        public dynASMTranslate()
+        {
+            InPortData.Add(new PortData("geometry", "The geometry.", typeof(object)));
+            InPortData.Add(new PortData("x", "The x component.", typeof(object)));
+            InPortData.Add(new PortData("y", "The y component.", typeof(object)));
+            InPortData.Add(new PortData("z", "The z component.", typeof(object)));
+            OutPortData.Add(new PortData("moved", "The moved geometry.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Geometry geo = (Geometry)((Value.Container)args[0]).Item;
+
+            double x = (double)((Value.Number)args[1]).Item;
+            double y = (double)((Value.Number)args[2]).Item;
+            double z = (double)((Value.Number)args[3]).Item;
+
+            //if (translated != null)
+            //{
+            //    translated.unpersist();
+            //    translated.Dispose();
+            //    translated = null;
+            //}
+
+            translated = geo.CopyAndTranslate(new Vector(x, y, z)) as Geometry;
+            translated.persist();
+
+            return Value.NewContainer(translated);
+        }
+    }
+
+    [NodeName("ASM Transform")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("transform")]
+    public class dynASMTransform : dynNodeWithOneOutput
+    {
+        Geometry transformed;
+
+        public dynASMTransform()
+        {
+            InPortData.Add(new PortData("geometry", "The geometry.", typeof(object)));
+            InPortData.Add(new PortData("cs", "The transforming cs.", typeof(object)));
+            OutPortData.Add(new PortData("moved", "The moved geometry.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Geometry geo = (Geometry)((Value.Container)args[0]).Item;
+            CoordinateSystem cs = (CoordinateSystem)((Value.Container)args[1]).Item;
+
+            if (transformed != null)
+                transformed.SetVisibility(false);
+
+            transformed = geo.CopyAndTransform(new CoordinateSystem(), cs) as Geometry;
+            transformed.persist();
+
+            return Value.NewContainer(transformed);
+        }
+    }
+
     [NodeName("ASM Line")]
     [NodeCategory(BuiltinNodeCategories.MISC)]
     [NodeDescription("line")]
@@ -112,14 +181,44 @@ namespace Dynamo.Nodes
         {
             Point p = (Point)((Value.Container)args[0]).Item;
 
-            if (cs != null)
-            {
-                cs.unpersist();
-                cs.Dispose();
-                cs = null;
-            }
+            //if (cs != null)
+            //{
+            //    cs.unpersist();
+            //    cs.Dispose();
+            //    cs = null;
+            //}
 
             cs = new CoordinateSystem(p, new Vector(1, 0, 0), new Vector(0, 1, 0));
+            cs.persist();
+
+            return Value.NewContainer(cs);
+        }
+    }
+
+
+    [NodeName("ASM CoordinateSystem By Point Rotation")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("Coordinate System by point")]
+    public class dynASMCoordinateSystemByPointRotation : dynNodeWithOneOutput
+    {
+        CoordinateSystem cs;
+
+        public dynASMCoordinateSystemByPointRotation()
+        {
+            InPortData.Add(new PortData("p", "Center point of Coordinate System.", typeof(object)));
+            InPortData.Add(new PortData("axis", "Rotation axis.", typeof(object)));
+            InPortData.Add(new PortData("angle", "Rotation amount.", typeof(object)));
+            OutPortData.Add(new PortData("cs", "The CoordinateSystem.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Point p = (Point)((Value.Container)args[0]).Item;
+            Vector v = (Vector)((Value.Container)args[1]).Item;
+            double angle = (double)((Value.Number)args[2]).Item;
+
+            cs = new CoordinateSystem(p, v, angle);
             cs.persist();
 
             return Value.NewContainer(cs);
@@ -148,12 +247,12 @@ namespace Dynamo.Nodes
             double y = (double)((Value.Number)args[1]).Item;
             double z = (double)((Value.Number)args[2]).Item;
 
-            if (p != null)
-            {
-                p.unpersist();
-                p.Dispose();
-                p = null;
-            }
+            //if (p != null)
+            //{
+            //    p.unpersist();
+            //    p.Dispose();
+            //    p = null;
+            //}
 
 
             p = new Point(x, y, z);
@@ -190,14 +289,51 @@ namespace Dynamo.Nodes
         }
     }
 
-    [NodeName("ASM Surface By Loft")]
+    [NodeName("ASM Aligned Ellipse")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("ellipse")]
+    public class dynASMAlignedEllipse : dynNodeWithOneOutput
+    {
+        Ellipse ell;
+
+        public dynASMAlignedEllipse()
+        {
+            InPortData.Add(new PortData("cp", "Center point of ellipse", typeof(object)));
+            InPortData.Add(new PortData("major axis len", "Length of major axis.", typeof(object)));
+            InPortData.Add(new PortData("minor axis len", "Length of minor axis.", typeof(object)));
+            OutPortData.Add(new PortData("crv", "The ellipse curve.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            if (ell != null)
+            {
+                //ell.unpersist();
+                //ell.Dispose();
+                ell.SetVisibility(false);
+                ell = null;
+            }
+
+            Point cp = (Point)((Value.Container)args[0]).Item;
+            double maja = (double)((Value.Number)args[1]).Item;
+            double mina = (double)((Value.Number)args[2]).Item;
+
+            ell = new Ellipse(cp, maja, mina);
+            ell.persist();
+
+            return Value.NewContainer(ell);
+        }
+    }
+
+    [NodeName("ASM Surface By Two Loft")]
     [NodeCategory(BuiltinNodeCategories.MISC)]
     [NodeDescription("loft")]
-    public class dynASMSurfaceByLoft : dynNodeWithOneOutput
+    public class dynASMSurfaceByTwoLoft : dynNodeWithOneOutput
     {
         Surface srf;
 
-        public dynASMSurfaceByLoft()
+        public dynASMSurfaceByTwoLoft()
         {
             InPortData.Add(new PortData("start", "The start of the loft.", typeof(object)));
             InPortData.Add(new PortData("end", "The end of the loft.", typeof(object)));
@@ -372,6 +508,49 @@ namespace Dynamo.Nodes
             solid.persist();
 
             return Value.NewContainer(solid);
+        }
+    }
+
+    [NodeName("ASM Surface By Lofts")]
+    [NodeCategory(BuiltinNodeCategories.MISC)]
+    [NodeDescription("surface by lofts")]
+    public class dynSurfaceByLoftedCurves : dynNodeWithOneOutput
+    {
+        Surface srf;
+
+        public dynSurfaceByLoftedCurves()
+        {
+            InPortData.Add(new PortData("curves", "Input geometry.", typeof(object)));
+            OutPortData.Add(new PortData("surface", "The lofted surface.", typeof(object)));
+            NodeUI.RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            List<Autodesk.ASM.Curve> curves = new List<Autodesk.ASM.Curve>();
+
+            var geos = ((Value.List)args[0]).Item;
+            FSharpList<Value> containers = Utils.SequenceToFSharpList(geos);
+            foreach (Value e in containers)
+            {
+                if (e.IsContainer)
+                {
+                    Autodesk.ASM.Curve c = (Autodesk.ASM.Curve)((Value.Container)(e)).Item;
+                    curves.Add(c);
+                }
+            }
+
+            if (srf != null)
+            {
+                srf.unpersist();
+                srf.Dispose();
+                srf = null;
+            }
+
+            srf = Surface.LoftFromCrossSections(curves.ToArray());
+            srf.persist();
+
+            return Value.NewContainer(srf);
         }
     }
 
