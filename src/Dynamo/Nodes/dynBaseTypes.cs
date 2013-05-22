@@ -42,6 +42,7 @@ using System.Windows.Input;
 using System.Windows.Data;
 using System.Globalization;
 using Binding = System.Windows.Forms.Binding;
+using Dynamo.Nodes.TypeSystem;
 
 namespace Dynamo.Nodes
 {
@@ -166,6 +167,8 @@ namespace Dynamo.Nodes
             
         }
 
+        protected abstract IDynamoType GetInputType(int index);
+
         public override void SetupCustomUIElements(dynNodeView NodeUI)
         {
             System.Windows.Controls.Button addButton = new System.Windows.Controls.Button();
@@ -225,7 +228,7 @@ namespace Dynamo.Nodes
 
         protected internal virtual void AddInput()
         {
-            InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", typeof(object)));
+            InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", null));
         }
 
         public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
@@ -254,7 +257,7 @@ namespace Dynamo.Nodes
 
                 if (subNode.Name == "Input")
                 {
-                    InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", typeof(object)));
+                    InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", null));
                 }
             }
             RegisterAllPorts();
@@ -273,8 +276,10 @@ namespace Dynamo.Nodes
     {
         public dynIdentity()
         {
-            InPortData.Add(new PortData("x", "in", typeof(object)));
-            OutPortData.Add(new PortData("x", "out", typeof(object)));
+            var t = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("x", "in", t));
+            OutPortData.Add(new PortData("x", "out", t));
             RegisterAllPorts();
         }
 
@@ -294,8 +299,11 @@ namespace Dynamo.Nodes
         public dynReverse()
             : base("reverse")
         {
-            InPortData.Add(new PortData("list", "List to sort", typeof(Value.List)));
-            OutPortData.Add(new PortData("rev", "Reversed list", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+            var t1 = new ListType(pType);
+
+            InPortData.Add(new PortData("list", "List to sort", t1));
+            OutPortData.Add(new PortData("rev", "Reversed list", t1));
 
             RegisterAllPorts();
         }
@@ -308,12 +316,17 @@ namespace Dynamo.Nodes
     {
         public dynNewList()
         {
-            InPortData.Add(new PortData("item(s)", "Item(s) to build a list out of", typeof(object)));
-            OutPortData.Add(new PortData("list", "A list", typeof(Value.List)));
+            InPortData.Add(new PortData("item(s)", "Item(s) to build a list out of", new ListType(PolymorphicType.Create())));
+            OutPortData.Add(new PortData("list", "A list", null));
 
             RegisterAllPorts();
 
             ArgumentLacing = LacingStrategy.Disabled;
+        }
+
+        protected override IDynamoType GetOutputType(int index)
+        {
+            return new TypeUnion(InPortData.Select(x => x.PortType));
         }
 
         protected override string getInputRootName()
@@ -324,15 +337,25 @@ namespace Dynamo.Nodes
         protected internal override void RemoveInput()
         {
             if (InPortData.Count == 2)
-                InPortData[0] = new PortData("item(s)", "Item(s) to build a list out of", typeof(object));
+            {
+                InPortData[0].NickName = "item(s)";
+                InPortData[0].ToolTipString = "Item(s) to build a list out of";
+                InPortData[0].PortType = new ListType(InPortData[0].PortType);
+            }
             if (InPortData.Count > 1)
+            {
                 base.RemoveInput();
+            }
         }
 
         protected internal override void AddInput()
         {
             if (InPortData.Count == 1)
-                InPortData[0] = new PortData("index0", "First item", typeof(object));
+            {
+                InPortData[0].NickName = "index0";
+                InPortData[0].ToolTipString = "First item";
+                InPortData[0].PortType = ((ListType)InPortData[0].PortType).InnerType;
+            }
             base.AddInput();
         }
 
@@ -359,9 +382,11 @@ namespace Dynamo.Nodes
         public dynSortWith()
             : base("sort-with")
         {
-            InPortData.Add(new PortData("list", "List to sort", typeof(Value.List)));
-            InPortData.Add(new PortData("c(x, y)", "Comparitor", typeof(object)));
-            OutPortData.Add(new PortData("sorted", "Sorted list", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("c(x, y)", "Comparitor", new FunctionType(pType, pType, new NumberType())));
+            InPortData.Add(new PortData("list", "List to sort", new ListType(pType)));
+            OutPortData.Add(new PortData("sorted", "Sorted list", new ListType(pType)));
 
             RegisterAllPorts();
         }
@@ -375,9 +400,11 @@ namespace Dynamo.Nodes
         public dynSortBy()
             : base("sort-by")
         {
-            InPortData.Add(new PortData("list", "List to sort", typeof(Value.List)));
-            InPortData.Add(new PortData("c(x)", "Key Mapper", typeof(object)));
-            OutPortData.Add(new PortData("sorted", "Sorted list", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("c(x)", "Key Mapper", new FunctionType(pType, new TypeUnion(new StringType(), new NumberType()))));
+            InPortData.Add(new PortData("list", "List to sort", new ListType(pType)));
+            OutPortData.Add(new PortData("sorted", "Sorted list", new ListType(pType)));
 
             RegisterAllPorts();
         }
@@ -391,8 +418,10 @@ namespace Dynamo.Nodes
         public dynSort()
             : base("sort")
         {
-            InPortData.Add(new PortData("list", "List of numbers or strings to sort", typeof(Value.List)));
-            OutPortData.Add(new PortData("sorted", "Sorted list", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("list", "List of numbers or strings to sort", new ListType(pType)));
+            OutPortData.Add(new PortData("sorted", "Sorted list", new ListType(pType)));
 
             RegisterAllPorts();
         }
@@ -407,10 +436,13 @@ namespace Dynamo.Nodes
         public dynFold()
             : base("foldl")
         {
-            InPortData.Add(new PortData("f(x, a)", "Reductor Funtion", typeof(object)));
-            InPortData.Add(new PortData("a", "Seed", typeof(object)));
-            InPortData.Add(new PortData("seq", "Sequence", typeof(Value.List)));
-            OutPortData.Add(new PortData("out", "Result", typeof(object)));
+            var a = PolymorphicType.Create();
+            var b = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("f(x, a)", "Reductor Funtion", new FunctionType(a, b, b)));
+            InPortData.Add(new PortData("a", "Seed", b));
+            InPortData.Add(new PortData("seq", "Sequence", new ListType(a)));
+            OutPortData.Add(new PortData("out", "Result", new ListType(b)));
 
             RegisterAllPorts();
         }
@@ -424,9 +456,11 @@ namespace Dynamo.Nodes
         public dynFilter()
             : base("filter")
         {
-            InPortData.Add(new PortData("p(x)", "Predicate", typeof(object)));
-            InPortData.Add(new PortData("seq", "Sequence to filter", typeof(Value.List)));
-            OutPortData.Add(new PortData("filtered", "Filtered Sequence", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("p(x)", "Predicate", new FunctionType(pType, new NumberType())));
+            InPortData.Add(new PortData("seq", "Sequence to filter", new ListType(pType)));
+            OutPortData.Add(new PortData("filtered", "Filtered Sequence", new ListType(pType)));
 
             RegisterAllPorts();
         }
@@ -441,10 +475,10 @@ namespace Dynamo.Nodes
         public dynBuildSeq()
             : base("build-list")
         {
-            InPortData.Add(new PortData("start", "Number to start the sequence at", typeof(Value.Number)));
-            InPortData.Add(new PortData("end", "Number to end the sequence at", typeof(Value.Number)));
-            InPortData.Add(new PortData("step", "Space between numbers", typeof(Value.Number)));
-            OutPortData.Add(new PortData("seq", "New sequence", typeof(Value.List)));
+            InPortData.Add(new PortData("start", "Number to start the sequence at", new NumberType()));
+            InPortData.Add(new PortData("end", "Number to end the sequence at", new NumberType()));
+            InPortData.Add(new PortData("step", "Space between numbers", new NumberType()));
+            OutPortData.Add(new PortData("seq", "New sequence", new ListType(new NumberType())));
 
             RegisterAllPorts();
         }
@@ -456,14 +490,29 @@ namespace Dynamo.Nodes
     [NodeSearchTags("zip")]
     public class dynCombine : dynVariableInput
     {
+        PolymorphicType outType = PolymorphicType.Create();
+
         public dynCombine()
         {
-            InPortData.Add(new PortData("comb", "Combinator", typeof(object)));
-            InPortData.Add(new PortData("list1", "First list", typeof(Value.List)));
-            InPortData.Add(new PortData("list2", "Second list", typeof(Value.List)));
-            OutPortData.Add(new PortData("combined", "Combined lists", typeof(Value.List)));
+            var a = PolymorphicType.Create();
+            var b = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("comb", "Combinator", null));
+            InPortData.Add(new PortData("list1", "First list", new ListType(a)));
+            InPortData.Add(new PortData("list2", "Second list", new ListType(b)));
+            OutPortData.Add(new PortData("combined", "Combined lists", new ListType(outType)));
 
             RegisterAllPorts();
+        }
+
+        protected override IDynamoType GetInputType(int index)
+        {
+            if (index == 0)
+            {
+                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), outType);
+            }
+            else
+                return PolymorphicType.Create();
         }
 
         protected override string getInputRootName()
@@ -474,15 +523,23 @@ namespace Dynamo.Nodes
         protected internal override void RemoveInput()
         {
             if (InPortData.Count == 3)
-                InPortData[1] = new PortData("lists", "List of lists to combine", typeof(object));
+            {
+                InPortData[1].NickName = "lists";
+                InPortData[2].NickName = "List of lists to combine";
+            }
             if (InPortData.Count > 2)
+            {
                 base.RemoveInput();
+            }
         }
 
         protected internal override void AddInput()
         {
             if (InPortData.Count == 2)
-                InPortData[1] = new PortData("list1", "First list", typeof(object));
+            {
+                InPortData[1].NickName = "list1";
+                InPortData[1].ToolTipString = "First list";
+            }
             base.AddInput();
         }
 
@@ -501,7 +558,8 @@ namespace Dynamo.Nodes
             {
                 for (; inputs > 2; inputs--)
                 {
-                    InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", typeof(object)));
+                    var t = PolymorphicType.Create();
+                    InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", new ListType(t)));
                 }
 
                 RegisterAllPorts();
@@ -531,14 +589,26 @@ namespace Dynamo.Nodes
     [NodeSearchTags("cross")]
     public class dynCartProd : dynVariableInput
     {
+        PolymorphicType outType = PolymorphicType.Create();
+
         public dynCartProd()
         {
-            InPortData.Add(new PortData("comb", "Combinator", typeof(object)));
-            InPortData.Add(new PortData("list1", "First list", typeof(Value.List)));
-            InPortData.Add(new PortData("list2", "Second list", typeof(Value.List)));
-            OutPortData.Add(new PortData("combined", "Combined lists", typeof(Value.List)));
+            InPortData.Add(new PortData("comb", "Combinator", null));
+            InPortData.Add(new PortData("list1", "First list", new ListType(PolymorphicType.Create())));
+            InPortData.Add(new PortData("list2", "Second list", new ListType(PolymorphicType.Create())));
+            OutPortData.Add(new PortData("combined", "Combined lists", new ListType(outType)));
 
             RegisterAllPorts();
+        }
+
+        protected override IDynamoType GetInputType(int index)
+        {
+            if (index == 0)
+            {
+                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), outType);
+            }
+            else
+                return PolymorphicType.Create();
         }
 
         protected override string getInputRootName()
@@ -549,7 +619,10 @@ namespace Dynamo.Nodes
         protected internal override void RemoveInput()
         {
             if (InPortData.Count == 3)
-                InPortData[1] = new PortData("lists", "List of lists to combine", typeof(object));
+            {
+                InPortData[1].NickName = "lists";
+                InPortData[1].ToolTipString = "List of lists to combine";
+            }
             if (InPortData.Count > 2)
                 base.RemoveInput();
         }
@@ -557,7 +630,10 @@ namespace Dynamo.Nodes
         protected internal override void AddInput()
         {
             if (InPortData.Count == 2)
-                InPortData[1] = new PortData("list1", "First list", typeof(object));
+            {
+                InPortData[1].NickName = "list1";
+                InPortData[1].ToolTipString = "First list";
+            }
             base.AddInput();
         }
 
@@ -576,7 +652,7 @@ namespace Dynamo.Nodes
             {
                 for (; inputs > 2; inputs--)
                 {
-                    InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", typeof(object)));
+                    InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", new ListType(PolymorphicType.Create())));
                 }
 
                 RegisterAllPorts();
@@ -608,9 +684,12 @@ namespace Dynamo.Nodes
         public dynMap()
             : base("map")
         {
-            InPortData.Add(new PortData("f(x)", "The procedure used to map elements", typeof(object)));
-            InPortData.Add(new PortData("seq", "The sequence to map over.", typeof(Value.List)));
-            OutPortData.Add(new PortData("mapped", "Mapped sequence", typeof(Value.List)));
+            var t = PolymorphicType.Create();
+            var t2 = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("f(x)", "The procedure used to map elements", new FunctionType(t, t2)));
+            InPortData.Add(new PortData("seq", "The sequence to map over.", new ListType(t)));
+            OutPortData.Add(new PortData("mapped", "Mapped sequence", new ListType(t2)));
 
             RegisterAllPorts();
         }
@@ -623,9 +702,11 @@ namespace Dynamo.Nodes
     {
         public dynDeCons()
         {
-            InPortData.Add(new PortData("list", "", typeof(Value.List)));
-            OutPortData.Add(new PortData("first", "", typeof(object)));
-            OutPortData.Add(new PortData("rest", "", typeof(Value.List)));
+            var t = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("list", "", new ListType(t)));
+            OutPortData.Add(new PortData("first", "", t));
+            OutPortData.Add(new PortData("rest", "", new ListType(t)));
 
             RegisterAllPorts();
         }
@@ -647,9 +728,11 @@ namespace Dynamo.Nodes
         public dynList()
             : base("cons")
         {
-            InPortData.Add(new PortData("first", "The new Head of the list", typeof(object)));
-            InPortData.Add(new PortData("rest", "The new Tail of the list", typeof(object)));
-            OutPortData.Add(new PortData("list", "Result List", typeof(Value.List)));
+            var t = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("first", "The new Head of the list", t));
+            InPortData.Add(new PortData("rest", "The new Tail of the list", new ListType(t)));
+            OutPortData.Add(new PortData("list", "Result List", new ListType(t)));
 
             RegisterAllPorts();
         }
@@ -663,9 +746,11 @@ namespace Dynamo.Nodes
         public dynTakeList()
             : base("take")
         {
-            InPortData.Add(new PortData("amt", "Amount of elements to extract", typeof(object)));
-            InPortData.Add(new PortData("list", "The list to extract elements from", typeof(Value.List)));
-            OutPortData.Add(new PortData("elements", "List of extraced elements", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("amt", "Amount of elements to extract", new NumberType()));
+            InPortData.Add(new PortData("list", "The list to extract elements from", new ListType(pType)));
+            OutPortData.Add(new PortData("elements", "List of extraced elements", new ListType(pType)));
 
             RegisterAllPorts();
         }
@@ -679,9 +764,11 @@ namespace Dynamo.Nodes
         public dynDropList()
             : base("drop")
         {
-            InPortData.Add(new PortData("amt", "Amount of elements to drop", typeof(object)));
-            InPortData.Add(new PortData("list", "The list to drop elements from", typeof(Value.List)));
-            OutPortData.Add(new PortData("elements", "List of remaining elements", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("amt", "Amount of elements to drop", new NumberType()));
+            InPortData.Add(new PortData("list", "The list to drop elements from", new ListType(pType)));
+            OutPortData.Add(new PortData("elements", "List of remaining elements", new ListType(pType)));
 
             RegisterAllPorts();
         }
@@ -695,9 +782,11 @@ namespace Dynamo.Nodes
         public dynGetFromList()
             : base("get")
         {
-            InPortData.Add(new PortData("index", "Index of the element to extract", typeof(object)));
-            InPortData.Add(new PortData("list", "The list to extract elements from", typeof(Value.List)));
-            OutPortData.Add(new PortData("element", "Extracted element", typeof(object)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("index", "Index of the element to extract", new NumberType()));
+            InPortData.Add(new PortData("list", "The list to extract elements from", new ListType(pType)));
+            OutPortData.Add(new PortData("element", "Extracted element", pType));
 
             RegisterAllPorts();
         }
@@ -711,7 +800,7 @@ namespace Dynamo.Nodes
     {
         public dynEmpty()
         {
-            OutPortData.Add(new PortData("empty", "An empty list", typeof(Value.List)));
+            OutPortData.Add(new PortData("empty", "An empty list", new ListType(PolymorphicType.Create())));
 
             RegisterAllPorts();
         }
@@ -751,8 +840,10 @@ namespace Dynamo.Nodes
         public dynIsEmpty()
             : base("empty?")
         {
-            InPortData.Add(new PortData("list", "A list", typeof(Value.List)));
-            OutPortData.Add(new PortData("empty?", "Is the given list empty?", typeof(bool)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("list", "A list", new ListType(pType)));
+            OutPortData.Add(new PortData("empty?", "Is the given list empty?", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -767,8 +858,8 @@ namespace Dynamo.Nodes
         public dynLength()
             : base("len")
         {
-            InPortData.Add(new PortData("list", "A list", typeof(Value.List)));
-            OutPortData.Add(new PortData("length", "Length of the list", typeof(object)));
+            InPortData.Add(new PortData("list", "A list", new ListType(PolymorphicType.Create())));
+            OutPortData.Add(new PortData("length", "Length of the list", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -782,9 +873,11 @@ namespace Dynamo.Nodes
         public dynAppend()
             : base("append")
         {
-            InPortData.Add(new PortData("listA", "First list", typeof(Value.List)));
-            InPortData.Add(new PortData("listB", "Second list", typeof(Value.List)));
-            OutPortData.Add(new PortData("A+B", "A appended onto B", typeof(Value.List)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("listA", "First list", new ListType(pType)));
+            InPortData.Add(new PortData("listB", "Second list", new ListType(pType)));
+            OutPortData.Add(new PortData("A+B", "A appended onto B", new ListType(pType)));
 
             RegisterAllPorts();
         }
@@ -798,14 +891,16 @@ namespace Dynamo.Nodes
         public dynFirst()
             : base("first")
         {
-            InPortData.Add(new PortData("list", "A list", typeof(Value.List)));
-            OutPortData.Add(new PortData("first", "First element in the list", typeof(object)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("list", "A list", new ListType(pType)));
+            OutPortData.Add(new PortData("first", "First element in the list", pType));
 
             RegisterAllPorts();
         }
     }
 
-    [NodeName("List Rest")]
+    [NodeName("Rest of List")]
     [NodeCategory(BuiltinNodeCategories.CORE_LISTS)]
     [NodeDescription("Gets the list with the first element removed.")]
     public class dynRest : dynBuiltinFunction
@@ -813,8 +908,10 @@ namespace Dynamo.Nodes
         public dynRest()
             : base("rest")
         {
-            InPortData.Add(new PortData("list", "A list", typeof(Value.List)));
-            OutPortData.Add(new PortData("rest", "List without the first element.", typeof(Value.List)));
+            var t = new ListType(PolymorphicType.Create());
+
+            InPortData.Add(new PortData("list", "A list", t));
+            OutPortData.Add(new PortData("rest", "List without the first element.", t));
 
             RegisterAllPorts();
         }
@@ -831,9 +928,9 @@ namespace Dynamo.Nodes
         protected dynComparison(string op, string name)
             : base(op)
         {
-            InPortData.Add(new PortData("x", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("y", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("x" + name + "y", "comp", typeof(Value.Number)));
+            InPortData.Add(new PortData("x", "operand", new NumberType()));
+            InPortData.Add(new PortData("y", "operand", new NumberType()));
+            OutPortData.Add(new PortData("x" + name + "y", "comp", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -891,9 +988,9 @@ namespace Dynamo.Nodes
         public dynAnd()
             : base("and")
         {
-            InPortData.Add(new PortData("a", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("b", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("a∧b", "result", typeof(Value.Number)));
+            InPortData.Add(new PortData("a", "operand", new NumberType()));
+            InPortData.Add(new PortData("b", "operand", new NumberType()));
+            OutPortData.Add(new PortData("a∧b", "result", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -962,9 +1059,9 @@ namespace Dynamo.Nodes
         public dynOr()
             : base("or")
         {
-            InPortData.Add(new PortData("a", "operand", typeof(bool)));
-            InPortData.Add(new PortData("b", "operand", typeof(bool)));
-            OutPortData.Add(new PortData("a∨b", "result", typeof(bool)));
+            InPortData.Add(new PortData("a", "operand", new NumberType()));
+            InPortData.Add(new PortData("b", "operand", new NumberType()));
+            OutPortData.Add(new PortData("a∨b", "result", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -1038,9 +1135,9 @@ namespace Dynamo.Nodes
         public dynXor()
             : base("xor")
         {
-            InPortData.Add(new PortData("a", "operand", typeof(bool)));
-            InPortData.Add(new PortData("b", "operand", typeof(bool)));
-            OutPortData.Add(new PortData("a⊻b", "result", typeof(bool)));
+            InPortData.Add(new PortData("a", "operand", new NumberType()));
+            InPortData.Add(new PortData("b", "operand", new NumberType()));
+            OutPortData.Add(new PortData("a⊻b", "result", new NumberType()));
             RegisterAllPorts();
         }
     }
@@ -1053,8 +1150,8 @@ namespace Dynamo.Nodes
         public dynNot()
             : base("not")
         {
-            InPortData.Add(new PortData("a", "operand", typeof(bool)));
-            OutPortData.Add(new PortData("!a", "result", typeof(bool)));
+            InPortData.Add(new PortData("a", "operand", new NumberType()));
+            OutPortData.Add(new PortData("!a", "result", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -1073,9 +1170,9 @@ namespace Dynamo.Nodes
         public dynAddition()
             : base("+")
         {
-            InPortData.Add(new PortData("x", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("y", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("x+y", "sum", typeof(Value.Number)));
+            InPortData.Add(new PortData("x", "operand", new NumberType()));
+            InPortData.Add(new PortData("y", "operand", new NumberType()));
+            OutPortData.Add(new PortData("x+y", "sum", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -1090,9 +1187,9 @@ namespace Dynamo.Nodes
         public dynSubtraction()
             : base("-")
         {
-            InPortData.Add(new PortData("x", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("y", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("x-y", "difference", typeof(Value.Number)));
+            InPortData.Add(new PortData("x", "operand", new NumberType()));
+            InPortData.Add(new PortData("y", "operand", new NumberType()));
+            OutPortData.Add(new PortData("x-y", "difference", new NumberType()));
             RegisterAllPorts();
         }
     }
@@ -1106,9 +1203,9 @@ namespace Dynamo.Nodes
         public dynMultiplication()
             : base("*")
         {
-            InPortData.Add(new PortData("x", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("y", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("x∙y", "product", typeof(Value.Number)));
+            InPortData.Add(new PortData("x", "operand", new NumberType()));
+            InPortData.Add(new PortData("y", "operand", new NumberType()));
+            OutPortData.Add(new PortData("x∙y", "product", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -1123,9 +1220,9 @@ namespace Dynamo.Nodes
         public dynDivision()
             : base("/")
         {
-            InPortData.Add(new PortData("x", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("y", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("x÷y", "result", typeof(Value.Number)));
+            InPortData.Add(new PortData("x", "operand", new NumberType()));
+            InPortData.Add(new PortData("y", "operand", new NumberType()));
+            OutPortData.Add(new PortData("x÷y", "result", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -1140,9 +1237,9 @@ namespace Dynamo.Nodes
         public dynModulo()
             : base("%")
         {
-            InPortData.Add(new PortData("x", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("y", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("x%y", "result", typeof(Value.Number)));
+            InPortData.Add(new PortData("x", "operand", new NumberType()));
+            InPortData.Add(new PortData("y", "operand", new NumberType()));
+            OutPortData.Add(new PortData("x%y", "result", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1157,9 +1254,9 @@ namespace Dynamo.Nodes
         public dynPow()
             : base("pow")
         {
-            InPortData.Add(new PortData("x", "operand", typeof(Value.Number)));
-            InPortData.Add(new PortData("y", "operand", typeof(Value.Number)));
-            OutPortData.Add(new PortData("x^y", "result", typeof(Value.Number)));
+            InPortData.Add(new PortData("x", "operand", new NumberType()));
+            InPortData.Add(new PortData("y", "operand", new NumberType()));
+            OutPortData.Add(new PortData("x^y", "result", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1172,8 +1269,8 @@ namespace Dynamo.Nodes
     {
         public dynRound()
         {
-            InPortData.Add(new PortData("dbl", "A number", typeof(Value.Number)));
-            OutPortData.Add(new PortData("int", "Rounded number", typeof(Value.Number)));
+            InPortData.Add(new PortData("dbl", "A number", new NumberType()));
+            OutPortData.Add(new PortData("int", "Rounded number", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1194,8 +1291,8 @@ namespace Dynamo.Nodes
     {
         public dynFloor()
         {
-            InPortData.Add(new PortData("dbl", "A number", typeof(Value.Number)));
-            OutPortData.Add(new PortData("int", "Number rounded down", typeof(Value.Number)));
+            InPortData.Add(new PortData("dbl", "A number", new NumberType()));
+            OutPortData.Add(new PortData("int", "Number rounded down", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1216,8 +1313,8 @@ namespace Dynamo.Nodes
     {
         public dynCeiling()
         {
-            InPortData.Add(new PortData("dbl", "A number", typeof(Value.Number)));
-            OutPortData.Add(new PortData("int", "Number rounded up", typeof(Value.Number)));
+            InPortData.Add(new PortData("dbl", "A number", new NumberType()));
+            OutPortData.Add(new PortData("int", "Number rounded up", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1237,7 +1334,7 @@ namespace Dynamo.Nodes
     {
         public dynRandom()
         {
-            OutPortData.Add(new PortData("rand", "Random number between 0.0 and 1.0.", typeof(Value.Number)));
+            OutPortData.Add(new PortData("rand", "Random number between 0.0 and 1.0.", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -1267,7 +1364,7 @@ namespace Dynamo.Nodes
     {
         public dynPi()
         {
-            OutPortData.Add(new PortData("3.14159...", "pi", typeof(Value.Number)));
+            OutPortData.Add(new PortData("3.14159...", "pi", new NumberType()));
             RegisterAllPorts();
         }
 
@@ -1300,8 +1397,8 @@ namespace Dynamo.Nodes
     {
         public dynSin()
         {
-            InPortData.Add(new PortData("θ", "Angle in radians", typeof(Value.Number)));
-            OutPortData.Add(new PortData("sin(θ)", "Sine value of the given angle", typeof(Value.Number)));
+            InPortData.Add(new PortData("θ", "Angle in radians", new NumberType()));
+            OutPortData.Add(new PortData("sin(θ)", "Sine value of the given angle", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1336,8 +1433,8 @@ namespace Dynamo.Nodes
     {
         public dynCos()
         {
-            InPortData.Add(new PortData("θ", "Angle in radians", typeof(Value.Number)));
-            OutPortData.Add(new PortData("cos(θ)", "Cosine value of the given angle", typeof(Value.Number)));
+            InPortData.Add(new PortData("θ", "Angle in radians", new NumberType()));
+            OutPortData.Add(new PortData("cos(θ)", "Cosine value of the given angle", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1372,8 +1469,8 @@ namespace Dynamo.Nodes
     {
         public dynTan()
         {
-            InPortData.Add(new PortData("θ", "Angle in radians", typeof(Value.Number)));
-            OutPortData.Add(new PortData("tan(θ)", "Tangent value of the given angle", typeof(Value.Number)));
+            InPortData.Add(new PortData("θ", "Angle in radians", new NumberType()));
+            OutPortData.Add(new PortData("tan(θ)", "Tangent value of the given angle", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -1412,13 +1509,33 @@ namespace Dynamo.Nodes
     [NodeSearchTags("begin")]
     public class dynBegin : dynVariableInput
     {
+        IDynamoType outputType;
+
         public dynBegin()
         {
-            InPortData.Add(new PortData("expr1", "Expression #1", typeof(object)));
-            InPortData.Add(new PortData("expr2", "Expression #2", typeof(object)));
-            OutPortData.Add(new PortData("last", "Result of final expression", typeof(object)));
+            InPortData.Add(new PortData("expr1", "Expression #1", null));
+            InPortData.Add(new PortData("expr2", "Expression #2", null));
+            OutPortData.Add(new PortData("last", "Result of final expression", null));
 
             RegisterAllPorts();
+        }
+
+        protected override void InPortConnected(PortData inPort, PortData outPortSender)
+        {
+            if (InPortData.Last() == inPort)
+            {
+                outputType = outPortSender.PortType;
+            }
+        }
+
+        protected override IDynamoType GetOutputType(int index)
+        {
+            return outputType;
+        }
+
+        protected override IDynamoType GetInputType(int index)
+        {
+            return new AnyType();
         }
 
         protected internal override void RemoveInput()
@@ -1482,12 +1599,24 @@ namespace Dynamo.Nodes
     [NodeDescription("Applies arguments to a function")]
     public class dynApply1 : dynVariableInput
     {
+        PolymorphicType outType = PolymorphicType.Create();
+
         public dynApply1()
         {
-            InPortData.Add(new PortData("func", "Procedure", typeof(object)));
-            OutPortData.Add(new PortData("result", "Result", typeof(object)));
+            InPortData.Add(new PortData("func", "Procedure", null));
+            OutPortData.Add(new PortData("result", "Result", outType));
 
             RegisterAllPorts();
+        }
+
+        protected override IDynamoType GetInputType(int index)
+        {
+            if (index == 0)
+            {
+                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), outType);
+            }
+            else
+                return PolymorphicType.Create();
         }
 
         protected override string getInputRootName()
@@ -1538,7 +1667,7 @@ namespace Dynamo.Nodes
                     var attr = subNode.Attributes["name"].Value;
 
                     if (!attr.Equals("func"))
-                        InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", typeof(object)));
+                        InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", PolymorphicType.Create()));
                 }
             }
             RegisterAllPorts();
@@ -1553,10 +1682,14 @@ namespace Dynamo.Nodes
     {
         public dynConditional()
         {
-            InPortData.Add(new PortData("test", "Test block", typeof(bool)));
-            InPortData.Add(new PortData("true", "True block", typeof(object)));
-            InPortData.Add(new PortData("false", "False block", typeof(object)));
-            OutPortData.Add(new PortData("result", "Result", typeof(object)));
+            var a = PolymorphicType.Create();
+            var b = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("test", "Test block", new NumberType()));
+            InPortData.Add(new PortData("true", "True block", a));
+            InPortData.Add(new PortData("false", "False block", b));
+            OutPortData.Add(new PortData("result", "Result", new TypeUnion(a, b)));
+
             RegisterAllPorts();
         }
 
@@ -1585,8 +1718,10 @@ namespace Dynamo.Nodes
 
         public dynBreakpoint()
         {
-            InPortData.Add(new PortData("", "Object to inspect", typeof(object)));
-            OutPortData.Add(new PortData("", "Object inspected", typeof(object)));
+            var pType = PolymorphicType.Create();
+
+            InPortData.Add(new PortData("", "Object to inspect", pType));
+            OutPortData.Add(new PortData("", "Object inspected", pType));
             RegisterAllPorts();
         }
 
@@ -1804,7 +1939,6 @@ namespace Dynamo.Nodes
         public dynBasicInteractive()
         {
             Type type = typeof(T);
-            OutPortData.Add(new PortData("", type.Name, type));
         }
 
         public override void SetupCustomUIElements(dynNodeView NodeUI)
@@ -1852,6 +1986,11 @@ namespace Dynamo.Nodes
 
     public abstract class dynDouble : dynBasicInteractive<double>
     {
+        public dynDouble()
+        {
+            OutPortData.Add(new PortData("", "", new NumberType()));
+        }
+
         public override Value Evaluate(FSharpList<Value> args)
         {
             return FScheme.Value.NewNumber(Value);
@@ -1877,6 +2016,11 @@ namespace Dynamo.Nodes
 
     public abstract class dynBool : dynBasicInteractive<bool>
     {
+        public dynBool()
+        {
+            OutPortData.Add(new PortData("", "", new NumberType()));
+        }
+
         public override Value Evaluate(FSharpList<Value> args)
         {
             return FScheme.Value.NewNumber(Value ? 1 : 0);
@@ -1885,6 +2029,11 @@ namespace Dynamo.Nodes
 
     public abstract class dynString : dynBasicInteractive<string>
     {
+        public dynString()
+        {
+            OutPortData.Add(new PortData("", "", new StringType()));
+        }
+
         public override string Value
         {
             get
@@ -2458,6 +2607,8 @@ namespace Dynamo.Nodes
 
         public dynStringFilename()
         {
+            OutPortData.Add(new PortData("", "", new StringType()));
+
             RegisterAllPorts();
         }
 
@@ -2571,11 +2722,16 @@ namespace Dynamo.Nodes
     {
         public dynConcatStrings()
         {
-            InPortData.Add(new PortData("s1", "First string", typeof(Value.String)));
-            InPortData.Add(new PortData("s2", "Second string", typeof(Value.String)));
-            OutPortData.Add(new PortData("combined", "Combined lists", typeof(Value.String)));
+            InPortData.Add(new PortData("s1", "First string", new StringType()));
+            InPortData.Add(new PortData("s2", "Second string", new StringType()));
+            OutPortData.Add(new PortData("combined", "Combined lists", new StringType()));
 
             RegisterAllPorts();
+        }
+
+        protected override IDynamoType GetInputType(int index)
+        {
+            return new StringType();
         }
 
         protected override string getInputRootName()
@@ -2615,7 +2771,7 @@ namespace Dynamo.Nodes
                 {
                     var attr = subNode.Attributes["name"].Value;
 
-                    InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", typeof(object)));
+                    InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", new StringType()));
                 }
             }
             RegisterAllPorts();
@@ -2644,8 +2800,8 @@ namespace Dynamo.Nodes
         public dynString2Num()
             : base("string->num")
         {
-            InPortData.Add(new PortData("s", "A string", typeof(Value.String)));
-            OutPortData.Add(new PortData("n", "A number", typeof(Value.Number)));
+            InPortData.Add(new PortData("s", "A string", new StringType()));
+            OutPortData.Add(new PortData("n", "A number", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -2659,8 +2815,8 @@ namespace Dynamo.Nodes
         public dynNum2String()
             : base("num->string")
         {
-            InPortData.Add(new PortData("n", "A number", typeof(Value.Number)));
-            OutPortData.Add(new PortData("s", "A string", typeof(Value.String)));
+            InPortData.Add(new PortData("n", "A number", new NumberType()));
+            OutPortData.Add(new PortData("s", "A string", new StringType()));
             RegisterAllPorts();
         }
     }
@@ -2672,9 +2828,9 @@ namespace Dynamo.Nodes
     {
         public dynSplitString()
         {
-            InPortData.Add(new PortData("str", "String to split", typeof(Value.String)));
-            InPortData.Add(new PortData("del", "Delimiter", typeof(Value.String)));
-            OutPortData.Add(new PortData("strs", "List of split strings", typeof(Value.List)));
+            InPortData.Add(new PortData("str", "String to split", new StringType()));
+            InPortData.Add(new PortData("del", "Delimiter", new StringType()));
+            OutPortData.Add(new PortData("strs", "List of split strings", new ListType(new StringType())));
 
             RegisterAllPorts();
         }
@@ -2700,9 +2856,9 @@ namespace Dynamo.Nodes
     {
         public dynJoinStrings()
         {
-            InPortData.Add(new PortData("strs", "List of strings to join.", typeof(Value.List)));
-            InPortData.Add(new PortData("del", "Delimier", typeof(Value.String)));
-            OutPortData.Add(new PortData("str", "Joined string", typeof(Value.String)));
+            InPortData.Add(new PortData("strs", "List of strings to join.", new ListType(new StringType())));
+            InPortData.Add(new PortData("del", "Delimier", new StringType()));
+            OutPortData.Add(new PortData("str", "Joined string", new StringType()));
 
             RegisterAllPorts();
         }
@@ -2725,9 +2881,9 @@ namespace Dynamo.Nodes
     {
         public dynStringCase()
         {
-            InPortData.Add(new PortData("str", "String to convert", typeof(Value.String)));
-            InPortData.Add(new PortData("upper?", "True = Uppercase, False = Lowercase", typeof(Value.Number)));
-            OutPortData.Add(new PortData("s", "Converted string", typeof(Value.String)));
+            InPortData.Add(new PortData("str", "String to convert", new StringType()));
+            InPortData.Add(new PortData("upper?", "True = Uppercase, False = Lowercase", new NumberType()));
+            OutPortData.Add(new PortData("s", "Converted string", new StringType()));
 
             RegisterAllPorts();
         }
@@ -2750,10 +2906,10 @@ namespace Dynamo.Nodes
     {
         public dynSubstring()
         {
-            InPortData.Add(new PortData("str", "String to take substring from", typeof(Value.String)));
-            InPortData.Add(new PortData("start", "Starting index of substring", typeof(Value.Number)));
-            InPortData.Add(new PortData("length", "Length of substring", typeof(Value.Number)));
-            OutPortData.Add(new PortData("sub", "Substring", typeof(Value.String)));
+            InPortData.Add(new PortData("str", "String to take substring from", new StringType()));
+            InPortData.Add(new PortData("start", "Starting index of substring", new NumberType()));
+            InPortData.Add(new PortData("length", "Length of substring", new NumberType()));
+            OutPortData.Add(new PortData("sub", "Substring", new StringType()));
 
             RegisterAllPorts();
         }

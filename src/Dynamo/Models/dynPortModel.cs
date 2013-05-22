@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using Dynamo.Nodes;
+using Dynamo.Nodes.TypeSystem;
 
 namespace Dynamo.Connectors
 {
@@ -178,7 +179,7 @@ namespace Dynamo.Connectors
     {
         string nickName;
         string toolTip;
-        Type portType;
+        IDynamoType portType;
 
         public string NickName
         {
@@ -192,13 +193,13 @@ namespace Dynamo.Connectors
             internal set { toolTip = value; }
         }
 
-        public Type PortType
+        public IDynamoType PortType
         {
             get { return portType; }
             set { portType = value; }
         }
 
-        public PortData(string nickName, string tip, Type portType)
+        public PortData(string nickName, string tip, IDynamoType portType)
         {
             NickName = nickName;
             ToolTipString = tip;

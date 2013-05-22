@@ -27,6 +27,7 @@ using Dynamo.Controls;
 using Dynamo.Nodes;
 using Dynamo.PackageManager;
 using System.Windows.Input;
+using Dynamo.Nodes.TypeSystem;
 
 namespace Dynamo.Utilities
 {
@@ -76,6 +77,14 @@ namespace Dynamo.Utilities
             foreach (string c in chars)
                 s = s.Replace(c, "");
             return s;
+        }
+
+        private static Dictionary<Guid, IDynamoType> parametricTypeDict =
+            new Dictionary<Guid, IDynamoType>();
+
+        public static Dictionary<Guid, IDynamoType> ParametricTypeDict
+        {
+            get { return parametricTypeDict; }
         }
 
     }

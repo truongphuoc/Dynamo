@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Collections.ObjectModel;
+using Dynamo.Nodes.TypeSystem;
 using Dynamo.Selection;
 using Microsoft.FSharp.Collections;
 
@@ -415,7 +416,29 @@ namespace Dynamo.Nodes
             }
             if (!_isDirty)
                 _isDirty = dirty;
-            return;
+        }
+
+        public virtual IDynamoType TypeCheck(int port)
+        {
+            if (Enumerable.Range(0, InPortData.Count).All(HasInput))
+            {
+                Tuple<int, dynNodeModel> input;
+                foreach (var inDataIdx in Enumerable.Range(0, InPortData.Count))
+                {
+                    if (TryGetInput(inDataIdx, out input))
+                    {
+                        var outIndex = input.Item1;
+                        var outNode = input.Item2;
+
+                        
+                    }
+                }
+                if (new FunctionType(InPortData.Select(x => x.PortType), OutPortData[port].PortType).Unify(new FunctionType()))
+            }
+            else
+            {
+
+            }
         }
 
         internal virtual INode BuildExpression(Dictionary<dynNodeModel, Dictionary<int, INode>> buildDict)
@@ -432,8 +455,7 @@ namespace Dynamo.Nodes
                 }
                 return listNode;
             }
-            else
-                return Build(buildDict, 0);
+            return Build(buildDict, 0);
         }
 
         //TODO: do all of this as the Ui is modified, simply return this?
@@ -598,6 +620,7 @@ namespace Dynamo.Nodes
             }
         }
 
+
         private Value evalIfDirty(FSharpList<Value> args)
         {
             if (OldValue == null || !SaveResult || RequiresRecalc)
@@ -615,13 +638,13 @@ namespace Dynamo.Nodes
         /// Wraps node evaluation logic so that it can be called in different threads.
         /// </summary>
         /// <returns>Some(Value) -> Result | None -> Run was cancelled</returns>
-        private delegate FSharpOption<Value> innerEvaluationDelegate();
+        private delegate FSharpOption<Value> InnerEvaluationDelegate();
 
-        public Dictionary<PortData, Value> evaluationDict = new Dictionary<PortData, Value>();
+        private readonly Dictionary<PortData, Value> _evaluationDict = new Dictionary<PortData, Value>();
 
         public Value GetValue(int outPortIndex)
         {
-            return evaluationDict.Values.ElementAt(outPortIndex);
+            return _evaluationDict.Values.ElementAt(outPortIndex);
         }
 
         protected internal virtual Value evaluateNode(FSharpList<Value> args)
@@ -633,12 +656,12 @@ namespace Dynamo.Nodes
                 savePortMappings();
             }
 
-            evaluationDict.Clear();
+            _evaluationDict.Clear();
 
             object[] iaAttribs = GetType().GetCustomAttributes(typeof(IsInteractiveAttribute), false);
             bool isInteractive = iaAttribs.Length > 0 && ((IsInteractiveAttribute)iaAttribs[0]).IsInteractive;
 
-            innerEvaluationDelegate evaluation = delegate
+            InnerEvaluationDelegate evaluation = delegate
             {
                 Value expr = null;
 
@@ -647,13 +670,13 @@ namespace Dynamo.Nodes
                     if (Controller.RunCancelled)
                         throw new CancelEvaluationException(false);
 
-                    __eval_internal(args, evaluationDict);
+                    __eval_internal(args, _evaluationDict);
 
                     expr = OutPortData.Count == 1
-                        ? evaluationDict[OutPortData[0]]
+                        ? _evaluationDict[OutPortData[0]]
                         : Value.NewList(
                             Utils.SequenceToFSharpList(
-                                evaluationDict.OrderBy(
+                                _evaluationDict.OrderBy(
                                     pair => OutPortData.IndexOf(pair.Key))
                                 .Select(
                                     pair => pair.Value)));
@@ -719,16 +742,8 @@ namespace Dynamo.Nodes
         
         protected internal virtual void __eval_internal(FSharpList<Value> args, Dictionary<PortData, Value> outPuts)
         {
-            var argList = new List<string>();
-            if (args.Any())
-            {
-                argList = args.Select(x => x.ToString()).ToList<string>();
-            }
-            var outPutsList = new List<string>();
-            if(outPuts.Any())
-            {
-                outPutsList = outPuts.Keys.Select(x=>x.NickName).ToList<string>();
-            }
+            var argList = args.Select(x => x.ToString()).ToList();
+            var outPutsList = outPuts.Keys.Select(x => x.NickName).ToList();
 
             Debug.WriteLine(string.Format("__eval_internal : {0} : {1}", 
                 string.Join(",", argList), 
@@ -782,8 +797,8 @@ namespace Dynamo.Nodes
             else
             {
                 s += "(lambda ("
-                   + string.Join(" ", InPortData.Where((_, i) => !HasInput(i)).Select(x => x.NickName))
-                   + ") (" + nick;
+                    + string.Join(" ", InPortData.Where((_, i) => !HasInput(i)).Select(x => x.NickName))
+                    + ") (" + nick;
                 //for (int i = 0; i < InPortData.Count; i++)
                 foreach (int data in Enumerable.Range(0, InPortData.Count))
                 {
@@ -804,6 +819,13 @@ namespace Dynamo.Nodes
         {
             Inputs[inputData] = Tuple.Create(outputData, node);
             CheckPortsForRecalc();
+
+            InPortConnected(InPortData[inputData], node.OutPortData[outputData]);
+        }
+
+        protected virtual void InPortConnected(PortData inPort, PortData outPortSender)
+        {
+
         }
         
         internal void ConnectOutput(int portData, int inputData, dynNodeModel nodeLogic)
