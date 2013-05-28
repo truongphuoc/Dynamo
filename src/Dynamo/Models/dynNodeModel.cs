@@ -423,21 +423,53 @@ namespace Dynamo.Nodes
             if (Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
                 Tuple<int, dynNodeModel> input;
-                foreach (var inDataIdx in Enumerable.Range(0, InPortData.Count))
+                
+                var result = PolymorphicType.Create();
+                var success = new FunctionType(
+                    InPortData.Select(x => x.PortType), 
+                    OutPortData[port].PortType).Unify(
+                        new FunctionType(
+                            Enumerable.Range(0, InPortData.Count).Select(
+                                x =>
+                                {
+                                    TryGetInput(x, out input);
+                                    return input.Item2.TypeCheck(input.Item1);
+                                }),
+                            result));
+                if (success)
                 {
-                    if (TryGetInput(inDataIdx, out input))
-                    {
-                        var outIndex = input.Item1;
-                        var outNode = input.Item2;
-
-                        
-                    }
+                    return result;
                 }
-                if (new FunctionType(InPortData.Select(x => x.PortType), OutPortData[port].PortType).Unify(new FunctionType()))
+                else
+                {
+                    throw new Exception("Type check failed.");
+                }
             }
             else
             {
+                var inputs = new List<IDynamoType>();
 
+                foreach (var inData in InPortData.Select((x, i) => new { Data = x, Index = i }))
+                {
+                    Tuple<int, dynNodeModel> input;
+                    if (TryGetInput(inData.Index, out input))
+                    {
+                        if (input.Item2.TypeCheck(input.Item1).Unify(inData.Data.PortType))
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            throw new Exception("Type check failed.");
+                        }
+                    }
+                    else
+                    {
+                        inputs.Add(inData.Data.PortType);
+                    }
+                }
+
+                return new FunctionType(inputs, OutPortData[port].PortType);
             }
         }
 

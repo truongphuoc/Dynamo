@@ -5,9 +5,43 @@ using System.Text;
 
 namespace Dynamo.Nodes.TypeSystem
 {
+    internal static class UnifyUtility
+    {
+        static bool Unify(PolymorphicType t1, IDynamoType t2)
+        {
+            if (t1.HasType)
+            {
+                return t1.Type.Unify(t2);
+            }
+            else
+            {
+                t1.Type = t2;
+                return true;
+            }
+        }
+
+        static bool Unify(IDynamoType t1, PolymorphicType t2)
+        {
+            return Unify(t2, t1);
+        }
+
+        static bool Unify(FunctionType t1, FunctionType t2)
+        {
+            return t1.Inputs.Zip(t2.Inputs, Tuple.Create).All(x => x.Item1.Unify(x.Item2))
+                && t1.Output.Unify(t2.Output);
+        }
+
+        public static bool Unify(this IDynamoType a, IDynamoType b)
+        {
+            if (a.Equals(b))
+                return true;
+
+            return Unify(a as dynamic, b as dynamic);
+        }
+    }
+
     public interface IDynamoType
     {
-        
     }
 
     public interface IAtomType : IDynamoType
@@ -20,7 +54,7 @@ namespace Dynamo.Nodes.TypeSystem
 
     }
 
-    public struct FunctionType : IAtomType
+    public struct FunctionType : IDynamoType
     {
         public List<IDynamoType> Inputs { get; private set; }
         public IDynamoType Output;
@@ -156,6 +190,10 @@ namespace Dynamo.Nodes.TypeSystem
         public PolymorphicType(Guid p)
         {
             Parameter = p;
+            Type = null;
         }
+
+        internal bool HasType { get { return Type != null; } }
+        internal IDynamoType Type;
     }
 }

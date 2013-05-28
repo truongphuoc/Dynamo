@@ -26,6 +26,7 @@ using Dynamo.FSchemeInterop.Node;
 using Dynamo.Utilities;
 using System.Windows.Media.Effects;
 using Dynamo.Nodes;
+using Dynamo.Nodes.TypeSystem;
 
 namespace Dynamo
 {
@@ -375,9 +376,16 @@ namespace Dynamo
 
             public dynSymbol()
             {
-                OutPortData.Add(new PortData("", "Symbol", typeof(object)));
+                OutPortData.Add(new PortData("", "Symbol", null));
 
                 RegisterAllPorts();
+            }
+
+            public override IDynamoType TypeCheck(int port)
+            {
+                var t = env[this];
+
+                t.vs.Select(x => Tuple.Create(x, PolymorphicType.Create()));
             }
 
             public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
