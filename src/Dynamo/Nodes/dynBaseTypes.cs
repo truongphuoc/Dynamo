@@ -21,6 +21,7 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Forms;
 using System.Windows.Media;
 using System.Xml;
@@ -43,6 +44,7 @@ using System.Windows.Data;
 using System.Globalization;
 using Binding = System.Windows.Forms.Binding;
 using Dynamo.Nodes.TypeSystem;
+using Panel = System.Windows.Controls.Panel;
 
 namespace Dynamo.Nodes
 {
@@ -167,7 +169,7 @@ namespace Dynamo.Nodes
             
         }
 
-        protected abstract IDynamoType GetInputType(int index);
+        protected override abstract IDynamoType GetInputType(int index);
 
         public override void SetupCustomUIElements(dynNodeView NodeUI)
         {
@@ -276,7 +278,7 @@ namespace Dynamo.Nodes
     {
         public dynIdentity()
         {
-            var t = PolymorphicType.Create();
+            var t = TypeVar.Create();
 
             InPortData.Add(new PortData("x", "in", t));
             OutPortData.Add(new PortData("x", "out", t));
@@ -299,7 +301,7 @@ namespace Dynamo.Nodes
         public dynReverse()
             : base("reverse")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
             var t1 = new ListType(pType);
 
             InPortData.Add(new PortData("list", "List to sort", t1));
@@ -316,12 +318,17 @@ namespace Dynamo.Nodes
     {
         public dynNewList()
         {
-            InPortData.Add(new PortData("item(s)", "Item(s) to build a list out of", new ListType(PolymorphicType.Create())));
+            InPortData.Add(new PortData("item(s)", "Item(s) to build a list out of", new ListType(TypeVar.Create())));
             OutPortData.Add(new PortData("list", "A list", null));
 
             RegisterAllPorts();
 
             ArgumentLacing = LacingStrategy.Disabled;
+        }
+
+        protected override IDynamoType GetInputType(int index)
+        {
+            return InPortData[index].PortType;
         }
 
         protected override IDynamoType GetOutputType(int index)
@@ -382,7 +389,7 @@ namespace Dynamo.Nodes
         public dynSortWith()
             : base("sort-with")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("c(x, y)", "Comparitor", new FunctionType(pType, pType, new NumberType())));
             InPortData.Add(new PortData("list", "List to sort", new ListType(pType)));
@@ -400,7 +407,7 @@ namespace Dynamo.Nodes
         public dynSortBy()
             : base("sort-by")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("c(x)", "Key Mapper", new FunctionType(pType, new TypeUnion(new StringType(), new NumberType()))));
             InPortData.Add(new PortData("list", "List to sort", new ListType(pType)));
@@ -418,7 +425,7 @@ namespace Dynamo.Nodes
         public dynSort()
             : base("sort")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("list", "List of numbers or strings to sort", new ListType(pType)));
             OutPortData.Add(new PortData("sorted", "Sorted list", new ListType(pType)));
@@ -436,8 +443,8 @@ namespace Dynamo.Nodes
         public dynFold()
             : base("foldl")
         {
-            var a = PolymorphicType.Create();
-            var b = PolymorphicType.Create();
+            var a = TypeVar.Create();
+            var b = TypeVar.Create();
 
             InPortData.Add(new PortData("f(x, a)", "Reductor Funtion", new FunctionType(a, b, b)));
             InPortData.Add(new PortData("a", "Seed", b));
@@ -456,7 +463,7 @@ namespace Dynamo.Nodes
         public dynFilter()
             : base("filter")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("p(x)", "Predicate", new FunctionType(pType, new NumberType())));
             InPortData.Add(new PortData("seq", "Sequence to filter", new ListType(pType)));
@@ -490,17 +497,17 @@ namespace Dynamo.Nodes
     [NodeSearchTags("zip")]
     public class dynCombine : dynVariableInput
     {
-        PolymorphicType outType = PolymorphicType.Create();
+        readonly TypeVar _outType = TypeVar.Create();
 
         public dynCombine()
         {
-            var a = PolymorphicType.Create();
-            var b = PolymorphicType.Create();
+            var a = TypeVar.Create();
+            var b = TypeVar.Create();
 
             InPortData.Add(new PortData("comb", "Combinator", null));
             InPortData.Add(new PortData("list1", "First list", new ListType(a)));
             InPortData.Add(new PortData("list2", "Second list", new ListType(b)));
-            OutPortData.Add(new PortData("combined", "Combined lists", new ListType(outType)));
+            OutPortData.Add(new PortData("combined", "Combined lists", new ListType(_outType)));
 
             RegisterAllPorts();
         }
@@ -509,10 +516,10 @@ namespace Dynamo.Nodes
         {
             if (index == 0)
             {
-                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), outType);
+                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), _outType);
             }
             else
-                return PolymorphicType.Create();
+                return TypeVar.Create();
         }
 
         protected override string getInputRootName()
@@ -558,7 +565,7 @@ namespace Dynamo.Nodes
             {
                 for (; inputs > 2; inputs--)
                 {
-                    var t = PolymorphicType.Create();
+                    var t = TypeVar.Create();
                     InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", new ListType(t)));
                 }
 
@@ -589,14 +596,14 @@ namespace Dynamo.Nodes
     [NodeSearchTags("cross")]
     public class dynCartProd : dynVariableInput
     {
-        PolymorphicType outType = PolymorphicType.Create();
+        readonly TypeVar _outType = TypeVar.Create();
 
         public dynCartProd()
         {
             InPortData.Add(new PortData("comb", "Combinator", null));
-            InPortData.Add(new PortData("list1", "First list", new ListType(PolymorphicType.Create())));
-            InPortData.Add(new PortData("list2", "Second list", new ListType(PolymorphicType.Create())));
-            OutPortData.Add(new PortData("combined", "Combined lists", new ListType(outType)));
+            InPortData.Add(new PortData("list1", "First list", new ListType(TypeVar.Create())));
+            InPortData.Add(new PortData("list2", "Second list", new ListType(TypeVar.Create())));
+            OutPortData.Add(new PortData("combined", "Combined lists", new ListType(_outType)));
 
             RegisterAllPorts();
         }
@@ -605,10 +612,10 @@ namespace Dynamo.Nodes
         {
             if (index == 0)
             {
-                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), outType);
+                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), _outType);
             }
             else
-                return PolymorphicType.Create();
+                return TypeVar.Create();
         }
 
         protected override string getInputRootName()
@@ -652,7 +659,7 @@ namespace Dynamo.Nodes
             {
                 for (; inputs > 2; inputs--)
                 {
-                    InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", new ListType(PolymorphicType.Create())));
+                    InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", new ListType(TypeVar.Create())));
                 }
 
                 RegisterAllPorts();
@@ -684,8 +691,8 @@ namespace Dynamo.Nodes
         public dynMap()
             : base("map")
         {
-            var t = PolymorphicType.Create();
-            var t2 = PolymorphicType.Create();
+            var t = TypeVar.Create();
+            var t2 = TypeVar.Create();
 
             InPortData.Add(new PortData("f(x)", "The procedure used to map elements", new FunctionType(t, t2)));
             InPortData.Add(new PortData("seq", "The sequence to map over.", new ListType(t)));
@@ -702,7 +709,7 @@ namespace Dynamo.Nodes
     {
         public dynDeCons()
         {
-            var t = PolymorphicType.Create();
+            var t = TypeVar.Create();
 
             InPortData.Add(new PortData("list", "", new ListType(t)));
             OutPortData.Add(new PortData("first", "", t));
@@ -728,7 +735,7 @@ namespace Dynamo.Nodes
         public dynList()
             : base("cons")
         {
-            var t = PolymorphicType.Create();
+            var t = TypeVar.Create();
 
             InPortData.Add(new PortData("first", "The new Head of the list", t));
             InPortData.Add(new PortData("rest", "The new Tail of the list", new ListType(t)));
@@ -746,7 +753,7 @@ namespace Dynamo.Nodes
         public dynTakeList()
             : base("take")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("amt", "Amount of elements to extract", new NumberType()));
             InPortData.Add(new PortData("list", "The list to extract elements from", new ListType(pType)));
@@ -764,7 +771,7 @@ namespace Dynamo.Nodes
         public dynDropList()
             : base("drop")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("amt", "Amount of elements to drop", new NumberType()));
             InPortData.Add(new PortData("list", "The list to drop elements from", new ListType(pType)));
@@ -782,7 +789,7 @@ namespace Dynamo.Nodes
         public dynGetFromList()
             : base("get")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("index", "Index of the element to extract", new NumberType()));
             InPortData.Add(new PortData("list", "The list to extract elements from", new ListType(pType)));
@@ -800,7 +807,7 @@ namespace Dynamo.Nodes
     {
         public dynEmpty()
         {
-            OutPortData.Add(new PortData("empty", "An empty list", new ListType(PolymorphicType.Create())));
+            OutPortData.Add(new PortData("empty", "An empty list", new ListType(TypeVar.Create())));
 
             RegisterAllPorts();
         }
@@ -840,7 +847,7 @@ namespace Dynamo.Nodes
         public dynIsEmpty()
             : base("empty?")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("list", "A list", new ListType(pType)));
             OutPortData.Add(new PortData("empty?", "Is the given list empty?", new NumberType()));
@@ -858,7 +865,7 @@ namespace Dynamo.Nodes
         public dynLength()
             : base("len")
         {
-            InPortData.Add(new PortData("list", "A list", new ListType(PolymorphicType.Create())));
+            InPortData.Add(new PortData("list", "A list", new ListType(TypeVar.Create())));
             OutPortData.Add(new PortData("length", "Length of the list", new NumberType()));
 
             RegisterAllPorts();
@@ -873,7 +880,7 @@ namespace Dynamo.Nodes
         public dynAppend()
             : base("append")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("listA", "First list", new ListType(pType)));
             InPortData.Add(new PortData("listB", "Second list", new ListType(pType)));
@@ -891,7 +898,7 @@ namespace Dynamo.Nodes
         public dynFirst()
             : base("first")
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("list", "A list", new ListType(pType)));
             OutPortData.Add(new PortData("first", "First element in the list", pType));
@@ -908,7 +915,7 @@ namespace Dynamo.Nodes
         public dynRest()
             : base("rest")
         {
-            var t = new ListType(PolymorphicType.Create());
+            var t = new ListType(TypeVar.Create());
 
             InPortData.Add(new PortData("list", "A list", t));
             OutPortData.Add(new PortData("rest", "List without the first element.", t));
@@ -1554,7 +1561,7 @@ namespace Dynamo.Nodes
             return InPortData.Count + 1;
         }
 
-        private INode nestedBegins(Stack<Tuple<int, dynNodeModel>> inputs, Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt)
+        private static INode nestedBegins(Stack<Tuple<int, dynNodeModel>> inputs, Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt)
         {
             var popped = inputs.Pop();
             var firstVal = popped.Item2.Build(preBuilt, popped.Item1);
@@ -1566,8 +1573,7 @@ namespace Dynamo.Nodes
                 newBegin.ConnectInput("expr2", firstVal);
                 return newBegin;
             }
-            else
-                return firstVal;
+            return firstVal;
         }
 
         protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort)
@@ -1599,12 +1605,12 @@ namespace Dynamo.Nodes
     [NodeDescription("Applies arguments to a function")]
     public class dynApply1 : dynVariableInput
     {
-        PolymorphicType outType = PolymorphicType.Create();
+        readonly TypeVar _outType = TypeVar.Create();
 
         public dynApply1()
         {
             InPortData.Add(new PortData("func", "Procedure", null));
-            OutPortData.Add(new PortData("result", "Result", outType));
+            OutPortData.Add(new PortData("result", "Result", _outType));
 
             RegisterAllPorts();
         }
@@ -1613,10 +1619,9 @@ namespace Dynamo.Nodes
         {
             if (index == 0)
             {
-                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), outType);
+                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), _outType);
             }
-            else
-                return PolymorphicType.Create();
+            return TypeVar.Create();
         }
 
         protected override string getInputRootName()
@@ -1667,7 +1672,7 @@ namespace Dynamo.Nodes
                     var attr = subNode.Attributes["name"].Value;
 
                     if (!attr.Equals("func"))
-                        InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", PolymorphicType.Create()));
+                        InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", TypeVar.Create()));
                 }
             }
             RegisterAllPorts();
@@ -1682,8 +1687,8 @@ namespace Dynamo.Nodes
     {
         public dynConditional()
         {
-            var a = PolymorphicType.Create();
-            var b = PolymorphicType.Create();
+            var a = TypeVar.Create();
+            var b = TypeVar.Create();
 
             InPortData.Add(new PortData("test", "Test block", new NumberType()));
             InPortData.Add(new PortData("true", "True block", a));
@@ -1718,7 +1723,7 @@ namespace Dynamo.Nodes
 
         public dynBreakpoint()
         {
-            var pType = PolymorphicType.Create();
+            var pType = TypeVar.Create();
 
             InPortData.Add(new PortData("", "Object to inspect", pType));
             OutPortData.Add(new PortData("", "Object inspected", pType));
@@ -1730,16 +1735,16 @@ namespace Dynamo.Nodes
             //add a text box to the input grid of the control
             button = new System.Windows.Controls.Button();
             button.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-            button.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+            button.VerticalAlignment = VerticalAlignment.Center;
             //inputGrid.RowDefinitions.Add(new RowDefinition());
             NodeUI.inputGrid.Children.Add(button);
-            System.Windows.Controls.Grid.SetColumn(button, 0);
-            System.Windows.Controls.Grid.SetRow(button, 0);
+            Grid.SetColumn(button, 0);
+            Grid.SetRow(button, 0);
             button.Content = "Continue";
 
             enabled = false;
 
-            button.Click += new RoutedEventHandler(button_Click);
+            button.Click += button_Click;
         }
 
         private bool _enabled;
@@ -1764,11 +1769,7 @@ namespace Dynamo.Nodes
             var result = args[0];
 
             Bench.Dispatcher.Invoke(new Action(
-               delegate
-               {
-                   Controller.DynamoViewModel.Log(FScheme.print(result));
-               }
-            ));
+                () => Controller.DynamoViewModel.Log(FScheme.print(result))));
 
             if (Controller.DynamoViewModel.RunInDebug)
             {
@@ -1945,13 +1946,15 @@ namespace Dynamo.Nodes
         {
             //add an edit window option to the 
             //main context window
-            System.Windows.Controls.MenuItem editWindowItem = new System.Windows.Controls.MenuItem();
-            editWindowItem.Header = "Edit...";
-            editWindowItem.IsCheckable = false;
+            var editWindowItem = new System.Windows.Controls.MenuItem
+            {
+                Header = "Edit...", 
+                IsCheckable = false
+            };
 
             NodeUI.MainContextMenu.Items.Add(editWindowItem);
 
-            editWindowItem.Click += new RoutedEventHandler(editWindowItem_Click);
+            editWindowItem.Click += editWindowItem_Click;
         }
 
         public virtual void editWindowItem_Click(object sender, RoutedEventArgs e)
@@ -1999,7 +2002,7 @@ namespace Dynamo.Nodes
         public override void editWindowItem_Click(object sender, RoutedEventArgs e)
         {
 
-            dynEditWindow editWindow = new dynEditWindow();
+            var editWindow = new dynEditWindow();
 
             //set the text of the edit window to begin
             editWindow.editText.Text = base.Value.ToString();
@@ -2132,16 +2135,15 @@ namespace Dynamo.Nodes
         public override void SetupCustomUIElements(dynNodeView NodeUI)
         {
             //add a text box to the input grid of the control
-            var tb = new dynTextBox();
-            tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-            tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-            NodeUI.inputGrid.Children.Add(tb);
-            System.Windows.Controls.Grid.SetColumn(tb, 0);
-            System.Windows.Controls.Grid.SetRow(tb, 0);
-            tb.IsNumeric = true;
-            tb.Background = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
+            var tb = new dynTextBox
+            {
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsNumeric = true,
+                Background = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                DataContext = this
+            };
 
-            tb.DataContext = this;
             var bindingVal = new System.Windows.Data.Binding("Value")
             {
                 Mode = BindingMode.TwoWay,
@@ -2151,23 +2153,10 @@ namespace Dynamo.Nodes
                 UpdateSourceTrigger = UpdateSourceTrigger.Explicit
             };
             tb.SetBinding(TextBox.TextProperty, bindingVal);
-            
-        }
 
-        public override double Value
-        {
-            get
-            {
-                return base.Value;
-            }
-            set
-            {
-                if (base.Value == value)
-                    return;
-
-                base.Value = value;
-                //RaisePropertyChanged("Value");
-            }
+            NodeUI.inputGrid.Children.Add(tb);
+            Grid.SetColumn(tb, 0);
+            Grid.SetRow(tb, 0);
         }
 
         protected override double DeserializeValue(string val)
@@ -2289,8 +2278,8 @@ namespace Dynamo.Nodes
             NodeUI.inputGrid.Children.Add(mintb);
             NodeUI.inputGrid.Children.Add(maxtb);
 
-            System.Windows.Controls.Grid.SetColumn(mintb, 0);
-            System.Windows.Controls.Grid.SetColumn(maxtb, 2);
+            Grid.SetColumn(mintb, 0);
+            Grid.SetColumn(maxtb, 2);
 
             displayBox = new TextBox()
             {
@@ -2300,7 +2289,7 @@ namespace Dynamo.Nodes
             };
 
             Canvas.SetTop(displayBox, NodeUI.Height);
-            Canvas.SetZIndex(displayBox, int.MaxValue);
+            Panel.SetZIndex(displayBox, int.MaxValue);
 
             displayBox.DataContext = this;
             maxtb.DataContext = this;
@@ -2320,7 +2309,7 @@ namespace Dynamo.Nodes
                 Source = this,
                 UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
             };
-            tb_slider.SetBinding(Slider.ValueProperty, sliderBinding);
+            tb_slider.SetBinding(RangeBase.ValueProperty, sliderBinding);
 
             var bindingMax = new System.Windows.Data.Binding("Max")
             {
@@ -2329,8 +2318,8 @@ namespace Dynamo.Nodes
                 Source = this,
                 UpdateSourceTrigger = UpdateSourceTrigger.Explicit
             };
-            tb_slider.SetBinding(Slider.MaximumProperty, bindingMax);
-            maxtb.SetBinding(dynTextBox.TextProperty, bindingMax);
+            tb_slider.SetBinding(RangeBase.MaximumProperty, bindingMax);
+            maxtb.SetBinding(TextBox.TextProperty, bindingMax);
 
             var bindingMin = new System.Windows.Data.Binding("Min")
             {
@@ -2339,8 +2328,8 @@ namespace Dynamo.Nodes
                 Source = this,
                 UpdateSourceTrigger = UpdateSourceTrigger.Explicit
             };
-            tb_slider.SetBinding(Slider.MinimumProperty, bindingMin);
-            mintb.SetBinding(dynTextBox.TextProperty, bindingMin);
+            tb_slider.SetBinding(RangeBase.MinimumProperty, bindingMin);
+            mintb.SetBinding(TextBox.TextProperty, bindingMin);
         }
 
         public override double Value
@@ -2447,21 +2436,21 @@ namespace Dynamo.Nodes
             //add a text box to the input grid of the control
             rbTrue = new System.Windows.Controls.RadioButton();
             rbFalse = new System.Windows.Controls.RadioButton();
-            rbTrue.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-            rbFalse.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+            rbTrue.VerticalAlignment = VerticalAlignment.Center;
+            rbFalse.VerticalAlignment = VerticalAlignment.Center;
 
             //use a unique name for the button group
             //so other instances of this element don't get confused
-            string groupName = Guid.NewGuid().ToString();
+            var groupName = Guid.NewGuid().ToString();
             rbTrue.GroupName = groupName;
             rbFalse.GroupName = groupName;
 
             rbTrue.Content = "1";
             rbFalse.Content = "0";
 
-            RowDefinition rd = new RowDefinition();
-            ColumnDefinition cd1 = new ColumnDefinition();
-            ColumnDefinition cd2 = new ColumnDefinition();
+            var rd = new RowDefinition();
+            var cd1 = new ColumnDefinition();
+            var cd2 = new ColumnDefinition();
             NodeUI.inputGrid.ColumnDefinitions.Add(cd1);
             NodeUI.inputGrid.ColumnDefinitions.Add(cd2);
             NodeUI.inputGrid.RowDefinitions.Add(rd);
@@ -2469,14 +2458,14 @@ namespace Dynamo.Nodes
             NodeUI.inputGrid.Children.Add(rbTrue);
             NodeUI.inputGrid.Children.Add(rbFalse);
 
-            System.Windows.Controls.Grid.SetColumn(rbTrue, 0);
-            System.Windows.Controls.Grid.SetRow(rbTrue, 0);
-            System.Windows.Controls.Grid.SetColumn(rbFalse, 1);
-            System.Windows.Controls.Grid.SetRow(rbFalse, 0);
+            Grid.SetColumn(rbTrue, 0);
+            Grid.SetRow(rbTrue, 0);
+            Grid.SetColumn(rbFalse, 1);
+            Grid.SetRow(rbFalse, 0);
 
             //rbFalse.IsChecked = true;
-            rbTrue.Checked += new System.Windows.RoutedEventHandler(rbTrue_Checked);
-            rbFalse.Checked += new System.Windows.RoutedEventHandler(rbFalse_Checked);
+            rbTrue.Checked += rbTrue_Checked;
+            rbFalse.Checked += rbFalse_Checked;
 
             rbFalse.DataContext = this;
             rbTrue.DataContext = this;
@@ -2485,14 +2474,14 @@ namespace Dynamo.Nodes
             {
                 Mode = BindingMode.TwoWay,
             };
-            rbTrue.SetBinding(System.Windows.Controls.RadioButton.IsCheckedProperty, rbTrueBinding);
+            rbTrue.SetBinding(ToggleButton.IsCheckedProperty, rbTrueBinding);
 
             var rbFalseBinding = new System.Windows.Data.Binding("Value")
             {
                 Mode = BindingMode.TwoWay,
                 Converter = new InverseBoolDisplay()
             };
-            rbFalse.SetBinding(System.Windows.Controls.RadioButton.IsCheckedProperty, rbFalseBinding);
+            rbFalse.SetBinding(ToggleButton.IsCheckedProperty, rbFalseBinding);
         }
 
         protected override bool DeserializeValue(string val)
@@ -2507,13 +2496,13 @@ namespace Dynamo.Nodes
             }
         }
 
-        void rbFalse_Checked(object sender, System.Windows.RoutedEventArgs e)
+        void rbFalse_Checked(object sender, RoutedEventArgs e)
         {
             //Value = false;
             dynSettings.ReturnFocusToSearch();
         }
 
-        void rbTrue_Checked(object sender, System.Windows.RoutedEventArgs e)
+        void rbTrue_Checked(object sender, RoutedEventArgs e)
         {
             //Value = true;
             dynSettings.ReturnFocusToSearch();
@@ -2540,8 +2529,8 @@ namespace Dynamo.Nodes
             tb = new dynTextBox();
 
             NodeUI.inputGrid.Children.Add(tb);
-            System.Windows.Controls.Grid.SetColumn(tb, 0);
-            System.Windows.Controls.Grid.SetRow(tb, 0);
+            Grid.SetColumn(tb, 0);
+            Grid.SetRow(tb, 0);
 
             tb.DataContext = this;
             var bindingVal = new System.Windows.Data.Binding("Value")
@@ -2603,7 +2592,7 @@ namespace Dynamo.Nodes
     [NodeDescription("Allows you to select a file on the system to get its filename.")]
     public class dynStringFilename : dynBasicInteractive<string>
     {
-        System.Windows.Controls.TextBox tb;
+        TextBox tb;
 
         public dynStringFilename()
         {
@@ -2615,22 +2604,22 @@ namespace Dynamo.Nodes
         public override void SetupCustomUIElements(dynNodeView NodeUI)
         {
             //add a button to the inputGrid on the dynElement
-            System.Windows.Controls.Button readFileButton = new System.Windows.Controls.Button();
+            var readFileButton = new System.Windows.Controls.Button();
             //readFileButton.Margin = new System.Windows.Thickness(0, 0, 0, 0);
             readFileButton.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
-            readFileButton.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-            readFileButton.Click += new System.Windows.RoutedEventHandler(readFileButton_Click);
+            readFileButton.VerticalAlignment = VerticalAlignment.Center;
+            readFileButton.Click += readFileButton_Click;
             readFileButton.Content = "Browse...";
             readFileButton.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-            readFileButton.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+            readFileButton.VerticalAlignment = VerticalAlignment.Center;
 
             tb = new TextBox();
             if(string.IsNullOrEmpty(Value))
                 Value = "No file selected.";
 
             tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-            tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-            SolidColorBrush backgroundBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 0, 0, 0));
+            tb.VerticalAlignment = VerticalAlignment.Center;
+            SolidColorBrush backgroundBrush = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
             tb.Background = backgroundBrush;
             tb.BorderThickness = new Thickness(0);
             tb.IsReadOnly = true;
@@ -2644,8 +2633,8 @@ namespace Dynamo.Nodes
             NodeUI.inputGrid.Children.Add(tb);
             NodeUI.inputGrid.Children.Add(readFileButton);
 
-            System.Windows.Controls.Grid.SetRow(readFileButton, 0);
-            System.Windows.Controls.Grid.SetRow(tb, 1);
+            Grid.SetRow(readFileButton, 0);
+            Grid.SetRow(tb, 1);
 
             //NodeUI.topControl.Height = 60;
             //NodeUI.UpdateLayout();
@@ -2659,37 +2648,14 @@ namespace Dynamo.Nodes
             tb.SetBinding(TextBox.TextProperty, bindingVal);
         }
 
-        public override string Value
-        {
-            get
-            {
-                return base.Value;
-            }
-            set
-            {
-                base.Value = value;
-
-                //tb.Text = string.IsNullOrEmpty(Value)
-                //   ? "No file selected."
-                //   : Value;
-            }
-        }
-
         protected override string DeserializeValue(string val)
         {
-            if (File.Exists(val))
-            {
-                return val;
-            }
-            else
-            {
-                return "";
-            }
+            return File.Exists(val) ? val : "";
         }
 
         void readFileButton_Click(object sender, RoutedEventArgs e)
         {
-            OpenFileDialog openDialog = new OpenFileDialog();
+            var openDialog = new OpenFileDialog();
 
             if (openDialog.ShowDialog() == DialogResult.OK)
             {
@@ -2769,8 +2735,6 @@ namespace Dynamo.Nodes
             {
                 if (subNode.Name == "Input")
                 {
-                    var attr = subNode.Attributes["name"].Value;
-
                     InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", new StringType()));
                 }
             }
@@ -2779,10 +2743,9 @@ namespace Dynamo.Nodes
 
         protected override InputNode Compile(IEnumerable<string> portNames)
         {
-            if (SaveResult)
-                return base.Compile(portNames);
-            else
-                return new FunctionNode("concat-strings", portNames);
+            return SaveResult 
+                ? base.Compile(portNames) 
+                : new FunctionNode("concat-strings", portNames);
         }
 
         public override Value Evaluate(FSharpList<Value> args)

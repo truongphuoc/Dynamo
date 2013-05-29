@@ -27,6 +27,7 @@ using Dynamo.Utilities;
 using System.Windows.Media.Effects;
 using Dynamo.Nodes;
 using Dynamo.Nodes.TypeSystem;
+using Microsoft.FSharp.Collections;
 
 namespace Dynamo
 {
@@ -43,7 +44,7 @@ namespace Dynamo
                 //Set inputs and output
                 SetInputs(inputs);
                 foreach (var output in outputs)
-                    OutPortData.Add(new PortData(output, "function output", typeof (object)));
+                    OutPortData.Add(new PortData(output, "function output", null));
 
                 RegisterAllPorts();
 
@@ -63,7 +64,7 @@ namespace Dynamo
                 ((DropShadowEffect) ui.elementRectangle.Effect).BlurRadius = 20;
                 ((DropShadowEffect) ui.elementRectangle.Effect).ShadowDepth = 0;
 
-                ui.MouseDoubleClick += new System.Windows.Input.MouseButtonEventHandler(ui_MouseDoubleClick);
+                ui.MouseDoubleClick += ui_MouseDoubleClick;
 
             }
 
@@ -118,6 +119,8 @@ namespace Dynamo
                 }
             }
 
+
+
             /// <summary>
             /// Sets the inputs of this function.
             /// </summary>
@@ -133,7 +136,7 @@ namespace Dynamo
                     }
                     else
                     {
-                        InPortData.Add(new PortData(input, "Input #" + (i + 1), typeof(object)));
+                        InPortData.Add(new PortData(input, "Input #" + (i + 1), null));
                     }
 
                     i++;
@@ -160,7 +163,7 @@ namespace Dynamo
                     }
                     else
                     {
-                        OutPortData.Add(new PortData(output, "Output #" + (i + 1), typeof(object)));
+                        OutPortData.Add(new PortData(output, "Output #" + (i + 1), null));
                     }
 
                     i++;
@@ -225,7 +228,7 @@ namespace Dynamo
                         int i = 0;
                         foreach (XmlNode outputNode in subNode.ChildNodes)
                         {
-                            var data = new PortData(outputNode.Attributes[0].Value, "Output #" + (i + 1), typeof(object));
+                            var data = new PortData(outputNode.Attributes[0].Value, "Output #" + (i + 1), null);
 
                             if (OutPortData.Count > i)
                             {
@@ -244,7 +247,7 @@ namespace Dynamo
                         int i = 0;
                         foreach (XmlNode inputNode in subNode.ChildNodes)
                         {
-                            var data = new PortData(inputNode.Attributes[0].Value, "Input #" + (i + 1), typeof(object));
+                            var data = new PortData(inputNode.Attributes[0].Value, "Input #" + (i + 1), null);
 
                             if (InPortData.Count > i)
                             {
@@ -261,7 +264,7 @@ namespace Dynamo
                     #region Legacy output support
                     else if (subNode.Name.Equals("Output"))
                     {
-                        var data = new PortData(subNode.Attributes[0].Value, "function output", typeof(object));
+                        var data = new PortData(subNode.Attributes[0].Value, "function output", null);
 
                         if (OutPortData.Any())
                             OutPortData[0] = data;
@@ -286,28 +289,30 @@ namespace Dynamo
 
             public dynOutput()
             {
-                InPortData.Add(new PortData("", "", typeof(object)));
+                InPortData.Add(new PortData("", "", null));
 
                 RegisterAllPorts();
             }
 
-            public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+            public override void SetupCustomUIElements(dynNodeView NodeUI)
             {
                 //add a text box to the input grid of the control
-                tb = new TextBox();
-                tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-                tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+                tb = new TextBox
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
                 NodeUI.inputGrid.Children.Add(tb);
-                System.Windows.Controls.Grid.SetColumn(tb, 0);
-                System.Windows.Controls.Grid.SetRow(tb, 0);
+                Grid.SetColumn(tb, 0);
+                Grid.SetRow(tb, 0);
 
                 //turn off the border
-                SolidColorBrush backgroundBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 0, 0, 0));
+                var backgroundBrush = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
                 tb.Background = backgroundBrush;
                 tb.BorderThickness = new Thickness(0);
 
                 tb.DataContext = this;
-                var bindingSymbol = new System.Windows.Data.Binding("Symbol")
+                var bindingSymbol = new Binding("Symbol")
                 {
                     Mode = BindingMode.TwoWay,
                     Converter = new StringDisplay()
@@ -381,36 +386,34 @@ namespace Dynamo
                 RegisterAllPorts();
             }
 
-            public override IDynamoType TypeCheck(int port)
+            internal override IDynamoType TypeCheck(int port, FSharpMap<string, TypeScheme> env)
             {
-                var t = env[this];
-
-                t.vs.Select(x => Tuple.Create(x, PolymorphicType.Create()));
+                return env[Symbol].Instantiate();
             }
 
             public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
             {
                 //add a text box to the input grid of the control
                 tb = new TextBox();
-                tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-                tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+                tb.HorizontalAlignment = HorizontalAlignment.Stretch;
+                tb.VerticalAlignment = VerticalAlignment.Center;
                 NodeUI.inputGrid.Children.Add(tb);
-                System.Windows.Controls.Grid.SetColumn(tb, 0);
-                System.Windows.Controls.Grid.SetRow(tb, 0);
+                Grid.SetColumn(tb, 0);
+                Grid.SetRow(tb, 0);
 
                 //turn off the border
-                SolidColorBrush backgroundBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 0, 0, 0));
+                SolidColorBrush backgroundBrush = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
                 tb.Background = backgroundBrush;
                 tb.BorderThickness = new Thickness(0);
 
                 tb.DataContext = this;
-                var bindingSymbol = new System.Windows.Data.Binding("Symbol")
+                var bindingSymbol = new Binding("Symbol")
                 {
                     Mode = BindingMode.TwoWay
                 };
                 tb.SetBinding(TextBox.TextProperty, bindingSymbol);
 
-                tb.TextChanged += new TextChangedEventHandler(tb_TextChanged);
+                tb.TextChanged += tb_TextChanged;
 
             }
 
@@ -544,6 +547,11 @@ namespace Dynamo
                 foreach (var def in definition.findAllDependencies(dependencySet))
                     yield return def;
             }
+        }
+
+        internal IDynamoType GetOutputType(int port, FSharpMap<string, TypeScheme> env)
+        {
+            throw new NotImplementedException();
         }
     }
 }

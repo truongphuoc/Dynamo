@@ -9,6 +9,7 @@ using Dynamo.Controls;
 using Dynamo.FSchemeInterop.Node;
 using Dynamo.FSchemeInterop;
 using Dynamo.Commands;
+using Dynamo.Nodes.TypeSystem;
 
 namespace Dynamo.Utilities
 {
@@ -777,17 +778,16 @@ namespace Dynamo.Utilities
 
         public static FScheme.Expression CompileFunction( FunctionDefinition definition, ref IEnumerable<string> inputNames, ref IEnumerable<string> outputNames )
         {
-       
             if (definition == null)
                 return null;
 
             // Get the internal nodes for the function
-            dynWorkspaceModel functionWorkspace = definition.Workspace;
+            var functionWorkspace = definition.Workspace;
 
             #region Find outputs
 
             // Find output elements for the node
-            IEnumerable<dynNodeModel> outputs = functionWorkspace.Nodes.Where(x => x is dynOutput);
+            var outputs = functionWorkspace.Nodes.Where(x => x is dynOutput).ToList();
 
             var topMost = new List<Tuple<int, dynNodeModel>>();
 
@@ -804,19 +804,21 @@ namespace Dynamo.Utilities
             {
                 // if there are no explicitly defined output nodes
                 // get the top most nodes and set THEM as tht output
-                IEnumerable<dynNodeModel> topMostNodes = functionWorkspace.GetTopMostNodes();
+                var topMostNodes = functionWorkspace.GetTopMostNodes();
 
                 var outNames = new List<string>();
 
-                foreach (dynNodeModel topNode in topMostNodes)
+                foreach (var topNode in topMostNodes)
                 {
-                    foreach (int output in Enumerable.Range(0, topNode.OutPortData.Count))
+                    //copy for-each variable for closure access (apparently can cause compiler amiguity)
+                    var node = topNode;
+                    var range = Enumerable.Range(0, topNode.OutPortData.Count)
+                        .Where(output => !node.HasOutput(output));
+
+                    foreach (var output in range)
                     {
-                        if (!topNode.HasOutput(output))
-                        {
-                            topMost.Add(Tuple.Create(output, topNode));
-                            outNames.Add(topNode.OutPortData[output].NickName);
-                        }
+                        topMost.Add(Tuple.Create(output, topNode));
+                        outNames.Add(topNode.OutPortData[output].NickName);
                     }
                 }
 
@@ -832,7 +834,7 @@ namespace Dynamo.Utilities
             }
 
             //Find function entry point, and then compile the function and add it to our environment
-            IEnumerable<dynNodeModel> variables = functionWorkspace.Nodes.Where(x => x is dynSymbol);
+            var variables = functionWorkspace.Nodes.Where(x => x is dynSymbol).ToList();
             inputNames = variables.Select(x => (x as dynSymbol).Symbol);
 
             INode top;
@@ -860,8 +862,8 @@ namespace Dynamo.Utilities
             }
             else
             {
-                // if the custom node is empty, it will initially be a number node
-                top = new NumberNode(0);
+                // if the custom node is empty, it will return an empty begin node (does nothing)
+                top = new BeginNode();
             }
                 
             // if the node has any outputs, we create a BeginNode in order to evaluate all of them
@@ -885,11 +887,11 @@ namespace Dynamo.Utilities
             }
 
             // make the anonymous function
-            FScheme.Expression expression = Utils.MakeAnon(variables.Select(x => x.GUID.ToString()),
-                                                            top.Compile());
+            var expression = Utils.MakeAnon(
+                variables.Select(x => x.GUID.ToString()),
+                top.Compile());
                 
             return expression;
-
         }
 
         private static string FormatFileName(string filename)
@@ -902,12 +904,7 @@ namespace Dynamo.Utilities
 
         internal static string RemoveChars(string s, IEnumerable<string> chars)
         {
-            foreach (string c in chars)
-                s = s.Replace(c, "");
-            return s;
+            return chars.Aggregate(s, (current, c) => current.Replace(c, ""));
         }
-
-
-
     }
 }

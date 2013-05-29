@@ -418,13 +418,21 @@ namespace Dynamo.Nodes
                 _isDirty = dirty;
         }
 
-        public virtual IDynamoType TypeCheck(int port)
+        protected virtual IDynamoType GetInputType(int port)
+        {
+            return InPortData[port].PortType;
+        }
+
+        protected virtual IDynamoType GetOutputType(int port)
+        {
+            return OutPortData[port].PortType;
+        }
+
+        internal virtual IDynamoType TypeCheck(int port, FSharpMap<string, TypeScheme> env)
         {
             if (Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
-                Tuple<int, dynNodeModel> input;
-                
-                var result = PolymorphicType.Create();
+                var result = TypeVar.Create();
                 var success = new FunctionType(
                     InPortData.Select(x => x.PortType), 
                     OutPortData[port].PortType).Unify(
@@ -432,45 +440,34 @@ namespace Dynamo.Nodes
                             Enumerable.Range(0, InPortData.Count).Select(
                                 x =>
                                 {
-                                    TryGetInput(x, out input);
-                                    return input.Item2.TypeCheck(input.Item1);
+                                    var input = Inputs[x];
+                                    return input.Item2.TypeCheck(input.Item1, env);
                                 }),
                             result));
                 if (success)
                 {
                     return result;
                 }
-                else
+                throw new Exception("Type check failed.");
+            }
+
+            var inputs = new List<IDynamoType>();
+
+            foreach (var inData in InPortData.Select((x, i) => new { Data = x, Index = i }))
+            {
+                Tuple<int, dynNodeModel> input;
+                if (TryGetInput(inData.Index, out input))
                 {
+                    if (input.Item2.TypeCheck(input.Item1, env).Unify(inData.Data.PortType))
+                    {
+                        continue;
+                    }
                     throw new Exception("Type check failed.");
                 }
+                inputs.Add(inData.Data.PortType);
             }
-            else
-            {
-                var inputs = new List<IDynamoType>();
 
-                foreach (var inData in InPortData.Select((x, i) => new { Data = x, Index = i }))
-                {
-                    Tuple<int, dynNodeModel> input;
-                    if (TryGetInput(inData.Index, out input))
-                    {
-                        if (input.Item2.TypeCheck(input.Item1).Unify(inData.Data.PortType))
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            throw new Exception("Type check failed.");
-                        }
-                    }
-                    else
-                    {
-                        inputs.Add(inData.Data.PortType);
-                    }
-                }
-
-                return new FunctionType(inputs, OutPortData[port].PortType);
-            }
+            return new FunctionType(inputs, OutPortData[port].PortType);
         }
 
         internal virtual INode BuildExpression(Dictionary<dynNodeModel, Dictionary<int, INode>> buildDict)
