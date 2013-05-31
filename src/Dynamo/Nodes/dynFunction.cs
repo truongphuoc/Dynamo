@@ -57,14 +57,14 @@ namespace Dynamo
 
             }
 
-            public override void SetupCustomUIElements(dynNodeView ui)
+            public override void SetupCustomUIElements(dynNodeView nodeUI)
             {
-                ((DropShadowEffect) ui.elementRectangle.Effect).Opacity = 1;
-                ((DropShadowEffect) ui.elementRectangle.Effect).Color = Colors.WhiteSmoke;
-                ((DropShadowEffect) ui.elementRectangle.Effect).BlurRadius = 20;
-                ((DropShadowEffect) ui.elementRectangle.Effect).ShadowDepth = 0;
+                ((DropShadowEffect) nodeUI.elementRectangle.Effect).Opacity = 1;
+                ((DropShadowEffect) nodeUI.elementRectangle.Effect).Color = Colors.WhiteSmoke;
+                ((DropShadowEffect) nodeUI.elementRectangle.Effect).BlurRadius = 20;
+                ((DropShadowEffect) nodeUI.elementRectangle.Effect).ShadowDepth = 0;
 
-                ui.MouseDoubleClick += ui_MouseDoubleClick;
+                nodeUI.MouseDoubleClick += ui_MouseDoubleClick;
 
             }
 
@@ -119,7 +119,15 @@ namespace Dynamo
                 }
             }
 
+            protected override IDynamoType GetInputType(int port)
+            {
+                return Definition.InputTypes[port];
+            }
 
+            protected override IDynamoType GetOutputType(int port)
+            {
+                return Definition.OutputTypes[port];
+            }
 
             /// <summary>
             /// Sets the inputs of this function.
@@ -294,7 +302,7 @@ namespace Dynamo
                 RegisterAllPorts();
             }
 
-            public override void SetupCustomUIElements(dynNodeView NodeUI)
+            public override void SetupCustomUIElements(dynNodeView nodeUI)
             {
                 //add a text box to the input grid of the control
                 tb = new TextBox
@@ -302,7 +310,7 @@ namespace Dynamo
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                NodeUI.inputGrid.Children.Add(tb);
+                nodeUI.inputGrid.Children.Add(tb);
                 Grid.SetColumn(tb, 0);
                 Grid.SetRow(tb, 0);
 
@@ -376,8 +384,8 @@ namespace Dynamo
         [IsInteractive(false)]
         public class dynSymbol : dynNodeModel
         {
-            TextBox tb;
-            private string symbol = "";
+            TextBox _tb;
+            private string _symbol = "";
 
             public dynSymbol()
             {
@@ -386,40 +394,42 @@ namespace Dynamo
                 RegisterAllPorts();
             }
 
-            internal override IDynamoType TypeCheck(int port, FSharpMap<string, TypeScheme> env)
+            internal override IDynamoType TypeCheck(int port, FSharpMap<dynSymbol, TypeScheme> env, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
             {
-                return env[Symbol].Instantiate();
+                return env[this].Instantiate();
             }
 
-            public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+            public override void SetupCustomUIElements(dynNodeView nodeUI)
             {
                 //add a text box to the input grid of the control
-                tb = new TextBox();
-                tb.HorizontalAlignment = HorizontalAlignment.Stretch;
-                tb.VerticalAlignment = VerticalAlignment.Center;
-                NodeUI.inputGrid.Children.Add(tb);
-                Grid.SetColumn(tb, 0);
-                Grid.SetRow(tb, 0);
+                _tb = new TextBox
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                nodeUI.inputGrid.Children.Add(_tb);
+                Grid.SetColumn(_tb, 0);
+                Grid.SetRow(_tb, 0);
 
                 //turn off the border
-                SolidColorBrush backgroundBrush = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
-                tb.Background = backgroundBrush;
-                tb.BorderThickness = new Thickness(0);
+                var backgroundBrush = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+                _tb.Background = backgroundBrush;
+                _tb.BorderThickness = new Thickness(0);
 
-                tb.DataContext = this;
+                _tb.DataContext = this;
                 var bindingSymbol = new Binding("Symbol")
                 {
                     Mode = BindingMode.TwoWay
                 };
-                tb.SetBinding(TextBox.TextProperty, bindingSymbol);
+                _tb.SetBinding(TextBox.TextProperty, bindingSymbol);
 
-                tb.TextChanged += tb_TextChanged;
+                _tb.TextChanged += tb_TextChanged;
 
             }
 
             void tb_TextChanged(object sender, TextChangedEventArgs e)
             {
-                Symbol = tb.Text;
+                Symbol = _tb.Text;
             }
 
             public override bool RequiresRecalc
@@ -437,17 +447,17 @@ namespace Dynamo
                 get
                 {
                     //return tb.Text;
-                    return symbol;
+                    return _symbol;
                 }
                 set
                 {
                     //tb.Text = value;
-                    symbol = value;
+                    _symbol = value;
                     RaisePropertyChanged("Symbol");
                 }
             }
 
-            protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort)
+            protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
             {
                 Dictionary<int, INode> result;
                 if (!preBuilt.TryGetValue(this, out result))
@@ -523,6 +533,8 @@ namespace Dynamo
         public dynWorkspaceModel Workspace { get; internal set; }
         public List<Tuple<int, dynNodeModel>> OutPortMappings { get; internal set; }
         public List<Tuple<int, dynNodeModel>> InPortMappings { get; internal set; }
+        public List<IDynamoType> InputTypes { get; internal set; }
+        public List<IDynamoType> OutputTypes { get; internal set; } 
         public bool RequiresRecalc { get; internal set; }
 
         public IEnumerable<FunctionDefinition> Dependencies
@@ -536,8 +548,8 @@ namespace Dynamo
         private IEnumerable<FunctionDefinition> findAllDependencies(HashSet<FunctionDefinition> dependencySet)
         {
             var query = Workspace.Nodes
-                .Where(node => node is dynFunction)
-                .Select(node => (node as dynFunction).Definition)
+                .OfType<dynFunction>()
+                .Select(node => node.Definition)
                 .Where(def => !dependencySet.Contains(def));
 
             foreach (var definition in query)

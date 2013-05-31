@@ -20,6 +20,7 @@ using Dynamo;
 using Dynamo.Connectors;
 using Dynamo.FSchemeInterop.Node;
 using Dynamo.FSchemeInterop;
+using Dynamo.Nodes.TypeSystem;
 using Dynamo.Utilities;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
@@ -57,14 +58,14 @@ namespace Dynamo.Nodes
                 this.RequiresRecalc = val;
         }
 
-        protected override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort)
+        protected override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
         {
             if (!Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
                 Error("Input must be connected.");
                 throw new Exception("Transaction Node requires all inputs to be connected.");
             }
-            return base.Build(preBuilt, outPort);
+            return base.Build(preBuilt, outPort, typeDict);
         }
 
         protected override InputNode Compile(IEnumerable<string> portNames)

@@ -7,7 +7,9 @@ using Dynamo.Controls;
 using Dynamo.FSchemeInterop;
 using Dynamo.FSchemeInterop.Node;
 using Dynamo.Nodes;
+using Dynamo.Nodes.TypeSystem;
 using Dynamo.Utilities;
+using Microsoft.FSharp.Collections;
 
 namespace Dynamo
 {
@@ -113,7 +115,7 @@ namespace Dynamo
             /* Execution Thread */
 
             //Get our entry points (elements with nothing connected to output)
-            IEnumerable<dynNodeModel> topElements = DynamoModel.HomeSpace.GetTopMostNodes();
+            List<dynNodeModel> topElements = DynamoModel.HomeSpace.GetTopMostNodes().ToList();
 
             //Mark the topmost as dirty/clean
             foreach (dynNodeModel topMost in topElements)
@@ -124,12 +126,22 @@ namespace Dynamo
             {
                 var topNode = new BeginNode(new List<string>());
                 int i = 0;
+
+                var typeDict = new Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>>();
+                FSharpMap<dynSymbol, TypeScheme> typeEnv = MapModule.Empty<dynSymbol, TypeScheme>();
+
+                foreach (dynNodeModel node in topElements)
+                {
+                    foreach (var j in Enumerable.Range(0, node.OutPortData.Count))
+                        node.TypeCheck(j, typeEnv, typeDict);
+                }
+
                 var buildDict = new Dictionary<dynNodeModel, Dictionary<int, INode>>();
                 foreach (dynNodeModel topMost in topElements)
                 {
                     string inputName = i.ToString();
                     topNode.AddInput(inputName);
-                    topNode.ConnectInput(inputName, topMost.BuildExpression(buildDict));
+                    topNode.ConnectInput(inputName, topMost.BuildExpression(buildDict, typeDict));
 
                     i++;
                 }

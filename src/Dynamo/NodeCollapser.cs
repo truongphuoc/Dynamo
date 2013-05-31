@@ -472,8 +472,8 @@ namespace Dynamo.Utilities
                 });
 
             var newlyPlacedCollapsedNode = currentWorkspace.Nodes
-                                            .Where(node => node is dynFunction)
-                                            .First(node => ((dynFunction)node).Definition.FunctionId == newNodeDefinition.FunctionId);
+                                            .OfType<dynFunction>()
+                                            .First(node => node.Definition.FunctionId == newNodeDefinition.FunctionId);
 
             // place the node as intended, not centered
             newlyPlacedCollapsedNode.X = avgX;

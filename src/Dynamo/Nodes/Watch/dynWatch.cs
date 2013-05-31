@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Linq;
 //using Autodesk.Revit.DB;
 using Dynamo.Connectors;
+using Dynamo.Nodes.TypeSystem;
 using Microsoft.FSharp.Collections;
 using Value = Dynamo.FScheme.Value;
 using Dynamo.Controls;
@@ -77,8 +78,9 @@ namespace Dynamo.Nodes
 
         public dynWatch()
         {
-            InPortData.Add(new PortData("", "Node to evaluate.", typeof(object)));
-            OutPortData.Add(new PortData("", "Watch contents.", typeof(object)));
+            var t = new GuessType();
+            InPortData.Add(new PortData("", "Node to evaluate.", t));
+            OutPortData.Add(new PortData("", "Watch contents.", t));
 
             RegisterAllPorts();
 
@@ -86,15 +88,15 @@ namespace Dynamo.Nodes
 
             foreach (dynPortModel p in InPorts)
             {
-                p.PortDisconnected += new PortConnectedHandler(p_PortDisconnected);
+                p.PortDisconnected += p_PortDisconnected;
             }
         }
 
-        public override void SetupCustomUIElements(dynNodeView NodeUI)
+        public override void SetupCustomUIElements(dynNodeView nodeUI)
         {
             watchTree = new WatchTree();
 
-            NodeUI.inputGrid.Children.Add(watchTree);
+            nodeUI.inputGrid.Children.Add(watchTree);
 
             watchTreeBranch = watchTree.FindResource("Tree") as WatchTreeBranch;
         }
@@ -107,9 +109,9 @@ namespace Dynamo.Nodes
         public override Value Evaluate(FSharpList<Value> args)
         {
             string content = "";
-            string prefix = "";
+            const string prefix = "";
 
-            int count = 0;
+            var count = 0;
 
             DispatchOnUIThread(
                 delegate

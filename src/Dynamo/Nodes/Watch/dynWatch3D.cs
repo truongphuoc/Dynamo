@@ -13,8 +13,10 @@
 //limitations under the License.
 
 using System;
+using System.Linq;
 using System.Windows;
 using System.Collections.Generic;
+using Dynamo.Nodes.TypeSystem;
 using Microsoft.FSharp.Collections;
 using Dynamo.Connectors;
 using Value = Dynamo.FScheme.Value;
@@ -36,42 +38,41 @@ namespace Dynamo.Nodes
 
         private PointsVisual3D _points;
         private LinesVisual3D _lines;
-        private List<MeshVisual3D> _meshes = new List<MeshVisual3D>();
+        private readonly List<MeshVisual3D> _meshes = new List<MeshVisual3D>();
 
         public Point3DCollection Points { get; set; }
         public Point3DCollection Lines { get; set; }
         public List<Mesh3D> Meshes { get; set; }
 
-        List<System.Windows.Media.Color> colors = new List<System.Windows.Media.Color>();
+        List<Color> _colors = new List<Color>();
         
         private bool _requiresRedraw = false;
         private bool _isRendering = false;
 
         public dynWatch3D()
         {
-            InPortData.Add(new PortData("IN", "Incoming geometry objects.", typeof(object)));
-            OutPortData.Add(new PortData("OUT", "Watch contents, passed through", typeof(object)));
+            var t = new GuessType();
+            InPortData.Add(new PortData("IN", "Incoming geometry objects.", t));
+            OutPortData.Add(new PortData("OUT", "Watch contents, passed through", t));
 
             RegisterAllPorts();
 
             ArgumentLacing = LacingStrategy.Disabled;
         }
 
-        public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+        public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
         {
-            MenuItem mi = new MenuItem();
-            mi.Header = "Zoom to Fit";
-            mi.Click += new RoutedEventHandler(mi_Click);
+            var mi = new MenuItem { Header = "Zoom to Fit" };
+            mi.Click += mi_Click;
 
-            NodeUI.MainContextMenu.Items.Add(mi);
+            nodeUI.MainContextMenu.Items.Add(mi);
 
             //take out the left and right margins and make this so it's not so wide
             //NodeUI.inputGrid.Margin = new Thickness(10, 10, 10, 10);
 
             //add a 3D viewport to the input grid
             //http://helixtoolkit.codeplex.com/wikipage?title=HelixViewport3D&referringTitle=Documentation
-            _watchView = new WatchView();
-            _watchView.watch_view.DataContext = this;
+            _watchView = new WatchView { watch_view = { DataContext = this } };
 
             RenderOptions.SetEdgeMode(_watchView, EdgeMode.Unspecified);
 
@@ -92,22 +93,24 @@ namespace Dynamo.Nodes
             _watchView.Width = 400;
             _watchView.Height = 300;
 
-            System.Windows.Shapes.Rectangle backgroundRect = new System.Windows.Shapes.Rectangle();
-            backgroundRect.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-            backgroundRect.VerticalAlignment = System.Windows.VerticalAlignment.Stretch;
-            backgroundRect.RadiusX = 10;
-            backgroundRect.RadiusY = 10;
-            backgroundRect.IsHitTestVisible = false;
-            BrushConverter bc = new BrushConverter();
-            Brush strokeBrush = (Brush)bc.ConvertFrom("#313131");
+            var backgroundRect = new System.Windows.Shapes.Rectangle
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                RadiusX = 10,
+                RadiusY = 10,
+                IsHitTestVisible = false
+            };
+            var bc = new BrushConverter();
+            var strokeBrush = (Brush)bc.ConvertFrom("#313131");
             backgroundRect.Stroke = strokeBrush;
             backgroundRect.StrokeThickness = 1;
-            SolidColorBrush backgroundBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(250, 250, 216));
+            var backgroundBrush = new SolidColorBrush(Color.FromRgb(250, 250, 216));
             backgroundRect.Fill = backgroundBrush;
-            NodeUI.inputGrid.Children.Add(backgroundRect);
-            NodeUI.inputGrid.Children.Add(_watchView);
+            nodeUI.inputGrid.Children.Add(backgroundRect);
+            nodeUI.inputGrid.Children.Add(_watchView);
 
-            CompositionTarget.Rendering += new EventHandler(CompositionTarget_Rendering);
+            CompositionTarget.Rendering += CompositionTarget_Rendering;
         }
 
         void mi_Click(object sender, RoutedEventArgs e)
@@ -115,7 +118,7 @@ namespace Dynamo.Nodes
             _watchView.watch_view.ZoomExtents();
         }
 
-        private void GetUpstreamIDrawable(List<IDrawable> drawables, Dictionary<int, Tuple<int, dynNodeModel>> inputs)
+        private static void GetUpstreamIDrawable(List<IDrawable> drawables, Dictionary<int, Tuple<int, dynNodeModel>> inputs)
         {
             foreach (KeyValuePair<int, Tuple<int, dynNodeModel>> pair in inputs)
             {
@@ -123,7 +126,7 @@ namespace Dynamo.Nodes
                     continue;
 
                 dynNodeModel node = pair.Value.Item2;
-                IDrawable drawable = node as IDrawable;
+                var drawable = node as IDrawable;
 
                 if (drawable != null)
                     drawables.Add(drawable);
@@ -152,14 +155,12 @@ namespace Dynamo.Nodes
             Meshes = new List<Mesh3D>();
 
             // a list of all the upstream IDrawable nodes
-            List<IDrawable> drawables = new List<IDrawable>();
+            var drawables = new List<IDrawable>();
 
             GetUpstreamIDrawable(drawables, Inputs);
 
-            foreach (IDrawable d in drawables)
+            foreach (RenderDescription rd in drawables.Select(d => d.Draw())) 
             {
-                RenderDescription rd = d.Draw();
-
                 foreach (Point3D p in rd.points)
                 {
                     Points.Add(p);
@@ -187,9 +188,8 @@ namespace Dynamo.Nodes
 
             _meshes.Clear();
 
-            foreach (Mesh3D mesh in Meshes)
+            foreach (MeshVisual3D vismesh in Meshes.Select(MakeMeshVisual3D)) 
             {
-                MeshVisual3D vismesh = MakeMeshVisual3D(mesh);
                 _watchView.watch_view.Children.Add(vismesh);
                 _meshes.Add(vismesh);
             }
@@ -198,9 +198,15 @@ namespace Dynamo.Nodes
             _isRendering = false;
         }
 
-        MeshVisual3D MakeMeshVisual3D(Mesh3D mesh)
+        static MeshVisual3D MakeMeshVisual3D(Mesh3D mesh)
         {
-            MeshVisual3D vismesh = new MeshVisual3D { Content = new GeometryModel3D { Geometry = mesh.ToMeshGeometry3D(), Material = Materials.White } };
+            var vismesh = new MeshVisual3D
+            {
+                Content = new GeometryModel3D
+                {
+                    Geometry = mesh.ToMeshGeometry3D(), Material = Materials.White
+                }
+            };
             return vismesh;
         }
 

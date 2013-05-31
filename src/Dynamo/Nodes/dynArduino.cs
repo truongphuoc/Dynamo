@@ -15,14 +15,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Windows.Controls;
 using System.Xml;
 using System.IO.Ports;
-
+using Dynamo.Nodes.TypeSystem;
 using Microsoft.FSharp.Collections;
 
 using Dynamo.Connectors;
-using Dynamo.Utilities;
 using Dynamo.FSchemeInterop;
 using Value = Dynamo.FScheme.Value;
 
@@ -34,86 +33,88 @@ namespace Dynamo.Nodes
     [NodeDescription("Manages connection to an Arduino microcontroller.")]
     public class dynArduino : dynNodeWithOneOutput
     {
-        SerialPort port;
-        System.Windows.Controls.MenuItem comItem;
+        SerialPort _port;
+        System.Windows.Controls.MenuItem _comItem;
 
         public dynArduino()
         {
-            InPortData.Add(new PortData("exec", "Execution Interval", typeof(object)));
-            OutPortData.Add(new PortData("arduino", "Serial port for later read/write", typeof(Value.Container)));
+            InPortData.Add(new PortData("exec", "Execution Interval", new NumberType()));
+            OutPortData.Add(new PortData("arduino", "Serial port for later read/write", new ObjectType(typeof(SerialPort))));
 
             RegisterAllPorts();
 
-            if (port == null)
+            if (_port == null)
             {
-                port = new SerialPort();
+                _port = new SerialPort();
             }
-            port.BaudRate = 9600;
-            port.NewLine = "\r\n";
-            port.DtrEnable = true;
+            _port.BaudRate = 9600;
+            _port.NewLine = "\r\n";
+            _port.DtrEnable = true;
 
         }
 
-        public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+        public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
         {
-            string[] serialPortNames = System.IO.Ports.SerialPort.GetPortNames();
+            string[] serialPortNames = SerialPort.GetPortNames();
 
             foreach (string portName in serialPortNames)
             {
 
-                if (lastComItem != null)
+                if (_lastComItem != null)
                 {
-                    lastComItem.IsChecked = false; // uncheck last checked item
+                    _lastComItem.IsChecked = false; // uncheck last checked item
                 }
-                comItem = new System.Windows.Controls.MenuItem();
-                comItem.Header = portName;
-                comItem.IsCheckable = true;
-                comItem.IsChecked = true;
-                comItem.Checked += new System.Windows.RoutedEventHandler(comItem_Checked);
-                NodeUI.MainContextMenu.Items.Add(comItem);
+                _comItem = new MenuItem
+                {
+                    Header = portName,
+                    IsCheckable = true,
+                    IsChecked = true
+                };
+                _comItem.Checked += comItem_Checked;
+                nodeUI.MainContextMenu.Items.Add(_comItem);
 
-                port.PortName = portName;
-                lastComItem = comItem;
+                _port.PortName = portName;
+                _lastComItem = _comItem;
             }
         }
 
-        System.Windows.Controls.MenuItem lastComItem = null;
+        MenuItem _lastComItem;
         
         void comItem_Checked(object sender, System.Windows.RoutedEventArgs e)
         {
-            System.Windows.Controls.MenuItem comItem = e.Source as System.Windows.Controls.MenuItem;
+            var comItem = e.Source as MenuItem;
 
-            if (lastComItem != null)
+            if (_lastComItem != null)
             {
-                lastComItem.IsChecked = false; // uncheck last checked item
+                _lastComItem.IsChecked = false; // uncheck last checked item
             }
 
-            if (port != null)
+            if (_port != null)
             {
-                if (port.IsOpen)
-                    port.Close();
+                if (_port.IsOpen)
+                    _port.Close();
             }
-            port.PortName = comItem.Header.ToString();
+            _port.PortName = comItem.Header.ToString();
             comItem.IsChecked = true;
-            lastComItem = comItem;
+            _lastComItem = comItem;
             
         }
 
         public override void Cleanup()
         {
-            if (port != null)
+            if (_port != null)
             {
-                if (port.IsOpen)
-                    port.Close();
+                if (_port.IsOpen)
+                    _port.Close();
             }
-            port = null;
+            _port = null;
         }
 
         public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
         {
             //Debug.WriteLine(pd.Object.GetType().ToString());
             XmlElement outEl = xmlDoc.CreateElement(typeof(double).FullName);
-            outEl.SetAttribute("value", port.PortName);
+            outEl.SetAttribute("value", _port.PortName);
             dynEl.AppendChild(outEl);
         }
 
@@ -123,7 +124,7 @@ namespace Dynamo.Nodes
             {
                 if (subNode.Name == typeof(double).FullName)
                 {
-                    port.PortName = subNode.Attributes[0].Value;
+                    _port.PortName = subNode.Attributes[0].Value;
                 }
             }
         }
@@ -132,28 +133,16 @@ namespace Dynamo.Nodes
         {
             if (((Value.Number)args[0]).Item == 1)
             {
-                if (port != null)
+                if (_port != null)
                 {
-                    bool isOpen = true;
-
-                    if (isOpen == true)
+                    if (!_port.IsOpen)
                     {
-                        if (!port.IsOpen)
-                        {
-                            port.Open();
-                        }
-
-
-                    }
-                    else if (isOpen == false)
-                    {
-                        if (port.IsOpen)
-                            port.Close();
+                        _port.Open();
                     }
                 }
             }
 
-            return Value.NewContainer(port); // pass the port downstream
+            return Value.NewContainer(_port); // pass the port downstream
         }
 
 
@@ -164,39 +153,34 @@ namespace Dynamo.Nodes
     [NodeDescription("Reads values from an Arduino microcontroller.")]
     public class dynArduinoRead : dynNodeWithOneOutput
     {
-        SerialPort port;
-        int range;
-        List<string> serialLine = new List<string>();
+        SerialPort _port;
+        int _range;
+        List<string> _serialLine = new List<string>();
 
 
         public dynArduinoRead()
         {
-            InPortData.Add(new PortData("arduino", "Arduino serial connection", typeof(object)));
-            InPortData.Add(new PortData("range", "Number of lines to read", typeof(double)));
-            OutPortData.Add(new PortData("output", "Serial output line", typeof(Value.List)));
+            InPortData.Add(new PortData("arduino", "Arduino serial connection", new ObjectType(typeof(SerialPort))));
+            InPortData.Add(new PortData("range", "Number of lines to read", new NumberType()));
+            OutPortData.Add(new PortData("output", "Serial output line", new ListType(new StringType())));
 
             RegisterAllPorts();
         }
 
         private List<string> GetArduinoData()
         {
-            string data = port.ReadExisting();
-            List<string> serialRange = new List<string>();
+            string data = _port.ReadExisting();
+            var serialRange = new List<string>();
 
-            string[] allData = data.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] allData = data.Split(
+                new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             if (allData.Length > 2)
             {
-
-
-                string lastData = allData[allData.Length - 2];
-                string[] values = lastData.Split(new char[]{'\t'}, StringSplitOptions.RemoveEmptyEntries);
-
                 //get the sensor values, tailing the values list and passing back a range from [range to count-2]
-                int start = allData.Length - range - 2; //get the second to last element as the last is often truncated
                 //int end = allData.Length - 2; 
                 try
                 {
-                    serialRange = allData.ToList<string>().GetRange(0, range);
+                    serialRange = allData.ToList().GetRange(0, _range);
                     return serialRange;
                 }
                 catch
@@ -213,35 +197,23 @@ namespace Dynamo.Nodes
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            port = (SerialPort)((Value.Container)args[0]).Item;
-            range = (int)((Value.Number)args[1]).Item;
+            _port = (SerialPort)((Value.Container)args[0]).Item;
+            _range = (int)((Value.Number)args[1]).Item;
             
 
-            if (port != null)
+            if (_port != null)
             {
-                bool isOpen = true;
-
-                if (isOpen == true)
+                if (!_port.IsOpen)
                 {
-                    if (!port.IsOpen)
-                    {
-                        port.Open();
-                    }
-
-                    //get the values from the serial port as a list of strings
-                    serialLine = GetArduinoData();
-
-
+                    _port.Open();
                 }
-                else if (isOpen == false)
-                {
-                    if (port.IsOpen)
-                        port.Close();
-                }
+
+                //get the values from the serial port as a list of strings
+                _serialLine = GetArduinoData();
             }
 
 
-            return Value.NewList(Utils.SequenceToFSharpList(serialLine.Select(Value.NewString)));
+            return Value.NewList(Utils.SequenceToFSharpList(_serialLine.Select(Value.NewString)));
         }
 
 
@@ -252,13 +224,13 @@ namespace Dynamo.Nodes
     [NodeDescription("Writes values to an Arduino microcontroller.")]
     public class dynArduinoWrite : dynNodeWithOneOutput
     {
-        SerialPort port;
+        SerialPort _port;
 
         public dynArduinoWrite()
         {
-            InPortData.Add(new PortData("arduino", "Arduino serial connection", typeof(object)));
-            InPortData.Add(new PortData("text", "Text to be written", typeof(string)));
-            OutPortData.Add(new PortData("success?", "Whether or not the operation was successful.", typeof(Value.Number)));
+            InPortData.Add(new PortData("arduino", "Arduino serial connection", new ObjectType(typeof(SerialPort))));
+            InPortData.Add(new PortData("text", "Text to be written", new StringType()));
+            OutPortData.Add(new PortData("success?", "Whether or not the operation was successful.", new NumberType()));
 
             RegisterAllPorts();
         }
@@ -267,36 +239,25 @@ namespace Dynamo.Nodes
         {
 
             dataLine = dataLine + "\r\n"; //termination
-            port.WriteLine(dataLine);
+            _port.WriteLine(dataLine);
 
         }
 
         public override Value Evaluate(FSharpList<Value> args)
         {
 
-            port = (SerialPort)((Value.Container)args[0]).Item;
+            _port = (SerialPort)((Value.Container)args[0]).Item;
             string dataToWrite = ((Value.String)args[1]).Item;// ((Value.Container)args[1]).Item;
 
-            if (port != null)
+            if (_port != null)
             {
-                bool isOpen = true;// Convert.ToBoolean(InPortData[0].Object);
-
-                if (isOpen == true)
+                if (!_port.IsOpen)
                 {
-                    if (!port.IsOpen)
-                    {
-                        port.Open();
-                    }
-
-                    //write data to the serial port
-                    WriteDataToArduino(dataToWrite);
-
+                    _port.Open();
                 }
-                else if (isOpen == false)
-                {
-                    if (port.IsOpen)
-                        port.Close();
-                }
+
+                //write data to the serial port
+                WriteDataToArduino(dataToWrite);
             }
             
 

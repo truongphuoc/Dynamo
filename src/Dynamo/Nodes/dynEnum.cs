@@ -1,16 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Xml;
 
 using Dynamo.Controls;
 using Dynamo.Connectors;
-using Dynamo.Utilities;
-
-using Dynamo.FSchemeInterop;
+using Dynamo.Nodes.TypeSystem;
 using Microsoft.FSharp.Collections;
 using Value = Dynamo.FScheme.Value;
 
@@ -19,64 +14,63 @@ namespace Dynamo.Nodes
     [IsInteractive(true)]
     public abstract class dynEnum : dynNodeWithOneOutput
     {
-        ComboBox combo;
+        ComboBox _combo;
 
         public dynEnum()
         {
-            OutPortData.Add(new PortData("", "Enum", typeof(Value.Container)));
+            OutPortData.Add(new PortData("", "Enum", new ObjectType(typeof(object))));
 
             RegisterAllPorts();
         }
 
-        public override void SetupCustomUIElements(dynNodeView NodeUI)
+        public override void SetupCustomUIElements(dynNodeView nodeUI)
         {
             //widen the control
-            NodeUI.topControl.Width = 300;
+            nodeUI.topControl.Width = 300;
 
             //add a drop down list to the window
-            combo = new ComboBox();
-            combo.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-            combo.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-
-            NodeUI.inputGrid.Children.Add(combo);
-
-            System.Windows.Controls.Grid.SetColumn(combo, 0);
-            System.Windows.Controls.Grid.SetRow(combo, 0);
-
-            combo.SelectionChanged += delegate
+            _combo = new ComboBox
             {
-                if (combo.SelectedIndex != -1)
-                    this.RequiresRecalc = true;
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            nodeUI.inputGrid.Children.Add(_combo);
+
+            Grid.SetColumn(_combo, 0);
+            Grid.SetRow(_combo, 0);
+
+            _combo.SelectionChanged += delegate
+            {
+                if (_combo.SelectedIndex != -1)
+                    RequiresRecalc = true;
             };
         }
 
         public void WireToEnum(Array arr)
         {
-            combo.ItemsSource = arr;
+            _combo.ItemsSource = arr;
         }
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            if (combo.SelectedItem != null)
+            if (_combo.SelectedItem != null)
             {
-                return Value.NewContainer(combo.SelectedItem);
+                return Value.NewContainer(_combo.SelectedItem);
             }
-            else
-            {
-                throw new Exception("There is nothing selected.");
-            }
+            throw new Exception("There is nothing selected.");
         }
 
         public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
         {
-            dynEl.SetAttribute("index", this.combo.SelectedIndex.ToString());
+            dynEl.SetAttribute("index", _combo.SelectedIndex.ToString());
         }
 
         public override void LoadElement(XmlNode elNode)
         {
             try
             {
-                combo.SelectedIndex = Convert.ToInt32(elNode.Attributes["index"].Value);
+                _combo.SelectedIndex = Convert.ToInt32(elNode.Attributes["index"].Value);
             }
             catch { }
         }

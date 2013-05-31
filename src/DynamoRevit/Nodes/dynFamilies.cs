@@ -48,7 +48,7 @@ namespace Dynamo.Nodes
             RegisterAllPorts();
         }
 
-        public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+        public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
         {
 
             //add a drop down list to the window
@@ -56,7 +56,7 @@ namespace Dynamo.Nodes
             combo.Width = 300;
             combo.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
             combo.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-            NodeUI.inputGrid.Children.Add(combo);
+            nodeUI.inputGrid.Children.Add(combo);
             System.Windows.Controls.Grid.SetColumn(combo, 0);
             System.Windows.Controls.Grid.SetRow(combo, 0);
 
@@ -143,7 +143,7 @@ namespace Dynamo.Nodes
             RegisterAllPorts();
         }
 
-        public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+        public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
         {
 
             //add a drop down list to the window
@@ -151,7 +151,7 @@ namespace Dynamo.Nodes
             paramBox.VerticalAlignment = System.Windows.VerticalAlignment.Center;
             paramBox.Width = 175;
 
-            NodeUI.inputGrid.Children.Add(paramBox);
+            nodeUI.inputGrid.Children.Add(paramBox);
             System.Windows.Controls.Grid.SetColumn(paramBox, 0);
             System.Windows.Controls.Grid.SetRow(paramBox, 0);
 

@@ -1,18 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Xml;
-
+using Dynamo.Nodes.TypeSystem;
 using Microsoft.FSharp.Collections;
 
 using Dynamo.Controls;
 using Dynamo.Connectors;
 using Dynamo.FSchemeInterop;
-using Dynamo.Utilities;
 using Value = Dynamo.FScheme.Value;
 
 using NCalc;
@@ -54,22 +52,21 @@ namespace Dynamo.Nodes
 
         public dynFormula()
         {
-            OutPortData.Add(new PortData("", "Result of math computation", typeof(Value.Number)));
+            OutPortData.Add(new PortData("", "Result of math computation", new NumberType()));
             RegisterAllPorts();
         }
 
-        public override void SetupCustomUIElements(dynNodeView NodeUI)
+        public override void SetupCustomUIElements(dynNodeView nodeUI)
         {
-            var tb = new dynTextBox();
-            tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-            tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-            NodeUI.inputGrid.Children.Add(tb);
-            System.Windows.Controls.Grid.SetColumn(tb, 0);
-            System.Windows.Controls.Grid.SetRow(tb, 0);
-            tb.IsNumeric = false;
-            tb.Background = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
+            var tb = new dynTextBox
+            {
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                IsNumeric = false,
+                Background = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                DataContext = this
+            };
 
-            tb.DataContext = this;
             var bindingVal = new Binding("Formula")
             {
                 Mode = BindingMode.TwoWay,
@@ -78,6 +75,10 @@ namespace Dynamo.Nodes
                 UpdateSourceTrigger = UpdateSourceTrigger.Explicit
             };
             tb.SetBinding(TextBox.TextProperty, bindingVal);
+
+            nodeUI.inputGrid.Children.Add(tb);
+            Grid.SetColumn(tb, 0);
+            Grid.SetRow(tb, 0);
         }
 
         public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
@@ -91,7 +92,7 @@ namespace Dynamo.Nodes
             processFormula();
         }
 
-        private static HashSet<string> RESERVED_NAMES = new HashSet<string>() { 
+        private static readonly HashSet<string> ReservedNames = new HashSet<string>() { 
             "Abs", "Acos", "Asin", "Atan", "Ceiling", "Cos",
             "Exp", "Floor", "IEEERemainder", "Log", "Log10",
             "Max", "Min", "Pow", "Round", "Sign", "Sin", "Sqrt",
@@ -117,31 +118,39 @@ namespace Dynamo.Nodes
                 return;
             }
 
-            var parameters = new SortedList<int, Tuple<string, Type>>();
+            var parameters = new SortedList<int, Tuple<string, IDynamoType>>();
             var paramSet = new HashSet<string>();
 
             e.EvaluateFunction += delegate(string name, FunctionArgs args)
             {
-                if (!paramSet.Contains(name) && !RESERVED_NAMES.Contains(name))
+                if (paramSet.Contains(name) || ReservedNames.Contains(name))
+                    return;
+
+                paramSet.Add(name);
+
+                IEnumerable<IDynamoType> inputs = args.Parameters.Select(x => new GuessType() as IDynamoType);
+
+                parameters.Add(
+                    Formula.IndexOf(name, StringComparison.Ordinal), 
+                    Tuple.Create(name, new FunctionType(inputs, new NumberType()) as IDynamoType));
+
+                foreach (var p in args.Parameters)
                 {
-                    paramSet.Add(name);
-                    parameters.Add(Formula.IndexOf(name), Tuple.Create(name, typeof(Value.Function)));
-                    foreach (var p in args.Parameters)
-                    {
-                        p.Evaluate();
-                    }
-                    args.Result = 0;
+                    p.Evaluate();
                 }
+                args.Result = 0;
             };
 
             e.EvaluateParameter += delegate(string name, ParameterArgs args)
             {
-                if (!paramSet.Contains(name))
-                {
-                    paramSet.Add(name);
-                    parameters.Add(Formula.IndexOf(name), Tuple.Create(name, typeof(Value.Number)));
-                    args.Result = 0;
-                }
+                if (paramSet.Contains(name))
+                    return;
+
+                paramSet.Add(name);
+                parameters.Add(
+                    Formula.IndexOf(name, StringComparison.Ordinal), 
+                    Tuple.Create(name, new NumberType() as IDynamoType));
+                args.Result = 0;
             };
 
             try
@@ -182,7 +191,7 @@ namespace Dynamo.Nodes
                     var func = ((Value.Function)functionLookup[name]).Item;
                     fArgs.Result = ((Value.Number)func.Invoke(
                         Utils.SequenceToFSharpList(
-                            fArgs.Parameters.Select<Expression, Value>(
+                            fArgs.Parameters.Select(
                                 p => Value.NewNumber(Convert.ToDouble(p.Evaluate())))))).Item;
                 }
             };

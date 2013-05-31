@@ -12,12 +12,8 @@
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using Dynamo.Connectors;
-
+using Dynamo.Nodes.TypeSystem;
 using Microsoft.FSharp.Collections;
 
 using Value = Dynamo.FScheme.Value;
@@ -32,8 +28,8 @@ namespace Dynamo.Nodes
     {
         public dynPause()
         {
-            InPortData.Add(new PortData("ms", "Delay in milliseconds", typeof(Value.Number)));
-            OutPortData.Add(new PortData("", "Success", typeof(Value.Number)));
+            InPortData.Add(new PortData("ms", "Delay in milliseconds", new NumberType()));
+            OutPortData.Add(new PortData("", "Success", new UnitType()));
 
             RegisterAllPorts();
         }
@@ -44,7 +40,7 @@ namespace Dynamo.Nodes
 
             Thread.Sleep(ms);
 
-            return Value.NewNumber(1);
+            return Value.NewDummy("Pause");
         }
     }
 
@@ -55,13 +51,13 @@ namespace Dynamo.Nodes
     {
         public dynExecuteInterval()
         {
-            InPortData.Add(new PortData("ms", "Delay in milliseconds", typeof(Value.Number)));
-            OutPortData.Add(new PortData("", "Success?", typeof(Value.Number)));
+            InPortData.Add(new PortData("ms", "Delay in milliseconds", new NumberType()));
+            OutPortData.Add(new PortData("", "", new UnitType()));
 
             RegisterAllPorts();
         }
 
-        Thread delayThread;
+        Thread _delayThread;
 
         //protected override void OnRunCancelled()
         //{
@@ -73,9 +69,9 @@ namespace Dynamo.Nodes
         {
             int delay = (int)((Value.Number)args[0]).Item;
 
-            if (delayThread == null || !delayThread.IsAlive)
+            if (_delayThread == null || !_delayThread.IsAlive)
             {
-                delayThread = new Thread(new ThreadStart(
+                _delayThread = new Thread(new ThreadStart(
                     delegate
                     {
                         Thread.Sleep(delay);
@@ -90,14 +86,13 @@ namespace Dynamo.Nodes
                                 return;
                         }
 
-                        this.RequiresRecalc = true;
-                    }
-                ));
+                        RequiresRecalc = true;
+                    }));
 
-                delayThread.Start();
+                _delayThread.Start();
             }
 
-            return Value.NewNumber(1);
+            return Value.NewDummy("Execution Interval");
         }
     }
 

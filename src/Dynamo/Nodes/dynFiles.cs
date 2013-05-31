@@ -19,6 +19,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Linq;
 using Dynamo.Connectors;
+using Dynamo.Nodes.TypeSystem;
 using Dynamo.Utilities;
 using Microsoft.FSharp.Collections;
 using Value = Dynamo.FScheme.Value;
@@ -32,7 +33,7 @@ namespace Dynamo.Nodes
 {
     public abstract class dynFileReaderBase : dynNodeWithOneOutput
     {
-        FileSystemEventHandler handler;
+        readonly FileSystemEventHandler _handler;
 
         string _path;
         protected string storedPath
@@ -42,24 +43,24 @@ namespace Dynamo.Nodes
             {
                 if (value != null && !value.Equals(_path))
                 {
-                    if (watcher != null)
-                        watcher.FileChanged -= handler;
+                    if (_watcher != null)
+                        _watcher.FileChanged -= _handler;
 
                     _path = value;
-                    watcher = new FileWatcher(_path);
-                    watcher.FileChanged += handler;
+                    _watcher = new FileWatcher(_path);
+                    _watcher.FileChanged += _handler;
                 }
             }
         }
 
-        FileWatcher watcher;
+        FileWatcher _watcher;
 
-        public dynFileReaderBase()
+        protected dynFileReaderBase()
         {
-            handler = new FileSystemEventHandler(watcher_FileChanged);
+            _handler = watcher_FileChanged;
 
-            InPortData.Add(new PortData("path", "Path to the file", typeof(Value.String)));
-            OutPortData.Add(new PortData("contents", "File contents", typeof(Value.String)));
+            InPortData.Add(new PortData("path", "Path to the file", new StringType()));
+            OutPortData.Add(new PortData("contents", "File contents", new StringType()));
 
             //NodeUI.RegisterInputsAndOutput();
         }
@@ -83,7 +84,7 @@ namespace Dynamo.Nodes
     [NodeDescription("Reads data from a file.")]
     public class dynFileReader : dynNodeWithOneOutput
     {
-        FileSystemEventHandler handler;
+        readonly FileSystemEventHandler _handler;
 
         string _path;
         string storedPath
@@ -93,24 +94,24 @@ namespace Dynamo.Nodes
             {
                 if (value != null && !value.Equals(_path))
                 {
-                    if (watcher != null)
-                        watcher.FileChanged -= handler;
+                    if (_watcher != null)
+                        _watcher.FileChanged -= _handler;
 
                     _path = value;
-                    watcher = new FileWatcher(_path);
-                    watcher.FileChanged += handler;
+                    _watcher = new FileWatcher(_path);
+                    _watcher.FileChanged += _handler;
                 }
             }
         }
 
-        FileWatcher watcher;
+        FileWatcher _watcher;
 
         public dynFileReader()
         {
-            handler = new FileSystemEventHandler(watcher_FileChanged);
+            _handler = watcher_FileChanged;
 
-            InPortData.Add(new PortData("path", "Path to the file", typeof(string)));
-            OutPortData.Add(new PortData("contents", "File contents", typeof(string)));
+            InPortData.Add(new PortData("path", "Path to the file", new StringType()));
+            OutPortData.Add(new PortData("contents", "File contents", new StringType()));
 
             RegisterAllPorts();
         }
@@ -132,24 +133,17 @@ namespace Dynamo.Nodes
         {
             storedPath = ((Value.String)args[0]).Item;
 
-            if (File.Exists(storedPath))
+            string contents;
+
+            using (var fs = new FileStream(storedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                string contents;
-
-                using (var fs = new FileStream(storedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var reader = new StreamReader(fs))
                 {
-                    using (var reader = new StreamReader(fs))
-                    {
-                        contents = reader.ReadToEnd();
-                    }
+                    contents = reader.ReadToEnd();
                 }
-
-                //reader.Close();
-
-                return Value.NewString(contents);
             }
-            else
-                return Value.NewString("");
+
+            return Value.NewString(contents);
         }
     }
 
@@ -159,33 +153,31 @@ namespace Dynamo.Nodes
     public class dynImageFileReader : dynFileReaderBase
     {
 
-        System.Windows.Controls.Image image1;
-        //int width = 320;
-        //int height = 240;
+        System.Windows.Controls.Image _image1;
 
         public dynImageFileReader()
         {
 
-            InPortData.Add(new PortData("numX", "Number of samples in the X direction.", typeof(object)));
-            InPortData.Add(new PortData("numY", "Number of samples in the Y direction.", typeof(object)));
+            InPortData.Add(new PortData("numX", "Number of samples in the X direction.", new NumberType()));
+            InPortData.Add(new PortData("numY", "Number of samples in the Y direction.", new NumberType()));
             RegisterAllPorts();
-            //Loaded += new RoutedEventHandler(topControl_Loaded);
-
         }
 
-        public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+        public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
         {
-            image1 = new System.Windows.Controls.Image();
-            image1.Width = 320;
-            image1.Height = 240;
+            _image1 = new System.Windows.Controls.Image
+            {
+                Width = 320,
+                Height = 240,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+                Name = "image1",
+                VerticalAlignment = VerticalAlignment.Top
+            };
             //image1.Margin = new Thickness(5);
-            image1.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
-            image1.Name = "image1";
-            image1.VerticalAlignment = System.Windows.VerticalAlignment.Top;
 
             //image1.Margin = new Thickness(0, 0, 0, 0);
 
-            NodeUI.inputGrid.Children.Add(image1);
+            nodeUI.inputGrid.Children.Add(_image1);
             //NodeUI.Width = 450;
             //NodeUI.Height = 240 + 5;
         }
@@ -202,7 +194,7 @@ namespace Dynamo.Nodes
 
                     try
                     {
-                        using (Bitmap bmp = new Bitmap(storedPath))
+                        using (var bmp = new Bitmap(storedPath))
                         {
 
                             //NodeUI.Dispatcher.Invoke(new Action(
@@ -227,7 +219,7 @@ namespace Dynamo.Nodes
 
                                 var hbitmap = bmp.GetHbitmap();
                                 var imageSource = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(bmp.Width, bmp.Height));
-                                image1.Source = imageSource;
+                                _image1.Source = imageSource;
                             });
 
                             // Do some processing
@@ -249,8 +241,7 @@ namespace Dynamo.Nodes
 
                 return Value.NewList(result);
             }
-            else
-                return Value.NewList(FSharpList<Value>.Empty);
+            return Value.NewList(FSharpList<Value>.Empty);
         }
     }
 
@@ -261,9 +252,9 @@ namespace Dynamo.Nodes
     {
         public dynFileWriter()
         {
-            InPortData.Add(new PortData("path", "Path to the file", typeof(Value.String)));
-            InPortData.Add(new PortData("text", "Text to be written", typeof(Value.String)));
-            OutPortData.Add(new PortData("success?", "Whether or not the operation was successful.", typeof(Value.Number)));
+            InPortData.Add(new PortData("path", "Path to the file", new StringType()));
+            InPortData.Add(new PortData("text", "Text to be written", new StringType()));
+            OutPortData.Add(new PortData("", "", new UnitType()));
 
             RegisterAllPorts();
         }
@@ -275,7 +266,8 @@ namespace Dynamo.Nodes
 
             try
             {
-                StreamWriter writer = new StreamWriter(new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write));
+                var writer = new StreamWriter(
+                    new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write));
                 writer.Write(text);
                 writer.Close();
             }
@@ -285,7 +277,7 @@ namespace Dynamo.Nodes
                 return Value.NewNumber(0);
             }
 
-            return Value.NewNumber(1);
+            return Value.NewDummy("Write file");
         }
     }
 
@@ -296,9 +288,9 @@ namespace Dynamo.Nodes
     {
         public dynListToCSV()
         {
-            InPortData.Add(new PortData("path", "Filename to write to", typeof(Value.String)));
-            InPortData.Add(new PortData("data", "List of lists to write into CSV", typeof(Value.List)));
-            OutPortData.Add(new PortData("success?", "Whether or not the file writing was successful", typeof(Value.Number)));
+            InPortData.Add(new PortData("path", "Filename to write to", new StringType()));
+            InPortData.Add(new PortData("data", "List of lists to write into CSV", new ListType()));
+            OutPortData.Add(new PortData("", "", new UnitType()));
 
             RegisterAllPorts();
         }
@@ -310,7 +302,8 @@ namespace Dynamo.Nodes
 
             try
             {
-                StreamWriter writer = new StreamWriter(new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write));
+                var writer = new StreamWriter(
+                    new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Write));
 
                 foreach (Value line in data)
                 {
@@ -325,7 +318,7 @@ namespace Dynamo.Nodes
                 return Value.NewNumber(0);
             }
 
-            return Value.NewNumber(1);
+            return Value.NewDummy("CSV Writer");
         }
     }
 
@@ -339,8 +332,8 @@ namespace Dynamo.Nodes
     {
         public dynFileWatcher()
         {
-            InPortData.Add(new PortData("path", "Path to the file to create a watcher for.", typeof(Value.String)));
-            OutPortData.Add(new PortData("fw", "Instance of a FileWatcher.", typeof (Value.Container)));
+            InPortData.Add(new PortData("path", "Path to the file to create a watcher for.", new StringType()));
+            OutPortData.Add(new PortData("fw", "Instance of a FileWatcher.", new ObjectType(typeof(FileWatcher))));
 
             RegisterAllPorts();
         }
@@ -359,38 +352,38 @@ namespace Dynamo.Nodes
     {
         public dynFileWatcherChanged()
         {
-            InPortData.Add(new PortData("fw", "File Watcher to check for a change.", typeof(Value.Container)));
-            OutPortData.Add(new PortData("changed?", "Whether or not the file has been changed.", typeof(Value.Number)));
+            InPortData.Add(new PortData("fw", "File Watcher to check for a change.", new ObjectType(typeof(FileWatcher))));
+            OutPortData.Add(new PortData("changed?", "Whether or not the file has been changed.", new NumberType()));
 
             RegisterAllPorts();
         }
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            FileWatcher watcher = (FileWatcher)((Value.Container)args[0]).Item;
+            var watcher = (FileWatcher)((Value.Container)args[0]).Item;
 
             return Value.NewNumber(watcher.Changed ? 1 : 0);
         }
     }
 
     //TODO: Add UI for specifying whether should error or continue (checkbox?)
-    [NodeName("Watched File Wait")]
+    [NodeName("Wait for Watched File to Change")]
     [NodeCategory(BuiltinNodeCategories.IO_FILE)]
     [NodeDescription("Waits for the specified watched file to change.")]
     public class dynFileWatcherWait : dynNodeWithOneOutput
     {
         public dynFileWatcherWait()
         {
-            InPortData.Add(new PortData("fw", "File Watcher to check for a change.", typeof(Value.Container)));
-            InPortData.Add(new PortData("limit", "Amount of time (in milliseconds) to wait for an update before failing.", typeof(Value.Number)));
-            OutPortData.Add(new PortData("changed?", "True: File was changed. False: Timed out.", typeof(Value.Number)));
+            InPortData.Add(new PortData("fw", "File Watcher to check for a change.", new ObjectType(typeof(FileWatcher))));
+            InPortData.Add(new PortData("limit", "Amount of time (in milliseconds) to wait for an update before failing.", new NumberType()));
+            OutPortData.Add(new PortData("", "", new UnitType()));
 
             RegisterAllPorts();
         }
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            FileWatcher watcher = (FileWatcher)((Value.Container)args[0]).Item;
+            var watcher = (FileWatcher)((Value.Container)args[0]).Item;
             double timeout = ((Value.Number)args[1]).Item;
 
             timeout = timeout == 0 ? double.PositiveInfinity : timeout;
@@ -410,7 +403,7 @@ namespace Dynamo.Nodes
                 }
             }
 
-            return Value.NewNumber(1);
+            return Value.NewDummy("Wait for Watched File");
         }
     }
 
@@ -421,15 +414,15 @@ namespace Dynamo.Nodes
     {
         public dynFileWatcherReset()
         {
-            InPortData.Add(new PortData("fw", "File Watcher to check for a change.", typeof(Value.Container)));
-            OutPortData.Add(new PortData("fw", "Updated watcher.", typeof(Value.Container)));
+            InPortData.Add(new PortData("fw", "File Watcher to check for a change.", new ObjectType(typeof(FileWatcher))));
+            OutPortData.Add(new PortData("fw", "Updated watcher.", new ObjectType(typeof(FileWatcher))));
 
             RegisterAllPorts();
         }
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            FileWatcher watcher = (FileWatcher)((Value.Container)args[0]).Item;
+            var watcher = (FileWatcher)((Value.Container)args[0]).Item;
 
             watcher.Reset();
 
@@ -441,8 +434,8 @@ namespace Dynamo.Nodes
     {
         public bool Changed { get; private set; }
 
-        private FileSystemWatcher watcher;
-        private FileSystemEventHandler handler;
+        private readonly FileSystemWatcher _watcher;
+        private readonly FileSystemEventHandler _handler;
 
         public event FileSystemEventHandler FileChanged;
 
@@ -450,17 +443,17 @@ namespace Dynamo.Nodes
         {
             Changed = false;
 
-            watcher = new FileSystemWatcher(
+            _watcher = new FileSystemWatcher(
                Path.GetDirectoryName(filePath),
                Path.GetFileName(filePath)
             );
-            handler = new FileSystemEventHandler(watcher_Changed);
+            _handler = watcher_Changed;
 
-            watcher.Changed += handler;
+            _watcher.Changed += _handler;
 
-            watcher.NotifyFilter = NotifyFilters.LastWrite;
+            _watcher.NotifyFilter = NotifyFilters.LastWrite;
 
-            watcher.EnableRaisingEvents = true;
+            _watcher.EnableRaisingEvents = true;
         }
 
         void watcher_Changed(object sender, FileSystemEventArgs e)
@@ -479,8 +472,8 @@ namespace Dynamo.Nodes
 
         public void Dispose()
         {
-            watcher.Changed -= handler;
-            watcher.Dispose();
+            _watcher.Changed -= _handler;
+            _watcher.Dispose();
         }
 
         #endregion

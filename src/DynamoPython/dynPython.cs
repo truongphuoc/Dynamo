@@ -243,7 +243,7 @@ namespace Dynamo.Nodes
                 return engine.Evaluate(PythonBindings.Bindings.Concat(bindings));
             };
 
-            Drawing = delegate(Value val) { return new RenderDescription(); };
+            Drawing = _ => new RenderDescription();
         }
     }
 
@@ -252,12 +252,12 @@ namespace Dynamo.Nodes
     [NodeDescription("Runs an embedded IronPython script")]
     public class dynPython : dynNodeWithOneOutput, IDrawable
     {
-        private bool dirty = true;
-        private Value lastEvalValue;
+        private bool _dirty = true;
+        private Value _lastEvalValue;
 
-        private Dictionary<string, dynamic> stateDict = new Dictionary<string, dynamic>();
+        private readonly Dictionary<string, dynamic> _stateDict = new Dictionary<string, dynamic>();
 
-        private string script = "#The input to this node will be stored in the IN variable.\ndataEnteringNode = IN\n\n#Assign your output to the OUT variable\nOUT = 0";
+        private string _script = "#The input to this node will be stored in the IN variable.\ndataEnteringNode = IN\n\n#Assign your output to the OUT variable\nOUT = 0";
 
         public dynPython()
         {
@@ -269,7 +269,7 @@ namespace Dynamo.Nodes
             ArgumentLacing = LacingStrategy.Disabled;
         }
 
-        public override void SetupCustomUIElements(Controls.dynNodeView NodeUI)
+        public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
         {
             //topControl.Height = 200;
             //topControl.Width = 300;
@@ -279,9 +279,9 @@ namespace Dynamo.Nodes
             var editWindowItem = new System.Windows.Controls.MenuItem();
             editWindowItem.Header = "Edit...";
             editWindowItem.IsCheckable = false;
-            NodeUI.MainContextMenu.Items.Add(editWindowItem);
-            editWindowItem.Click += new RoutedEventHandler(editWindowItem_Click);
-            NodeUI.UpdateLayout();
+            nodeUI.MainContextMenu.Items.Add(editWindowItem);
+            editWindowItem.Click += editWindowItem_Click;
+            nodeUI.UpdateLayout();
         }
 
         //TODO: Make this smarter
@@ -298,7 +298,7 @@ namespace Dynamo.Nodes
         {
             XmlElement script = xmlDoc.CreateElement("Script");
             //script.InnerText = this.tb.Text;
-            script.InnerText = this.script;
+            script.InnerText = this._script;
             dynEl.AppendChild(script);
         }
 
@@ -308,7 +308,7 @@ namespace Dynamo.Nodes
             {
                 if (subNode.Name == "Script")
                     //this.tb.Text = subNode.InnerText;
-                    script = subNode.InnerText;
+                    _script = subNode.InnerText;
             }
         }
 
@@ -321,15 +321,15 @@ namespace Dynamo.Nodes
                .Concat(PythonBindings.Bindings)
                .ToList();
 
-            bindings.Add(new Binding("__persistant__", this.stateDict));
+            bindings.Add(new Binding("__persistant__", this._stateDict));
 
             return bindings;
         }
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            Value result = PythonEngine.Evaluator(dirty, script, makeBindings(args));
-            lastEvalValue = result;
+            Value result = PythonEngine.Evaluator(_dirty, _script, makeBindings(args));
+            _lastEvalValue = result;
             return result;
         }
 
@@ -354,7 +354,7 @@ namespace Dynamo.Nodes
             }
 
             //set the text of the edit window to begin
-            editWindow.editText.Text = script;
+            editWindow.editText.Text = _script;
 
             if (editWindow.ShowDialog() != true)
             {
@@ -362,9 +362,9 @@ namespace Dynamo.Nodes
             }
 
             //set the value from the text in the box
-            script = editWindow.editText.Text;
+            _script = editWindow.editText.Text;
 
-            this.dirty = true;
+            this._dirty = true;
         }
 
 
@@ -414,7 +414,7 @@ namespace Dynamo.Nodes
 
         public RenderDescription Draw()
         {
-            return PythonEngine.Drawing(lastEvalValue);
+            return PythonEngine.Drawing(_lastEvalValue);
         }
 
     }

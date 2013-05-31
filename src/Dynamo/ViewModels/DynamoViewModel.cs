@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -15,61 +16,44 @@ using System.Windows.Media.Imaging;
 using System.Xml;
 using Dynamo.Commands;
 using Dynamo.Connectors;
-using Dynamo.FSchemeInterop;
-using Dynamo.FSchemeInterop.Node;
 using Dynamo.Nodes;
 using Dynamo.Selection;
 using Dynamo.Utilities;
 using Microsoft.Practices.Prism.Commands;
+using MessageBox = System.Windows.MessageBox;
+using UserControl = System.Windows.Controls.UserControl;
 
 namespace Dynamo.Controls
 {
-
-    public class DynamoViewModel:dynViewModelBase
+    public class DynamoViewModel : dynViewModelBase
     {
-
         #region properties
 
-        public event EventHandler RequestLayoutUpdate;
-        public event EventHandler WorkspaceChanged;
-
-        public virtual void OnRequestLayoutUpdate(object sender, EventArgs e)
-        {
-            if (RequestLayoutUpdate != null)
-                RequestLayoutUpdate(this, e);
-        }
-        public virtual void OnWorkspaceChanged(object sender, EventArgs e)
-        {
-            if (WorkspaceChanged != null)
-            {
-                WorkspaceChanged(this, e);
-            }
-        }
-        
-        private DynamoModel _model;
-
-        private string logText;
-        private ConnectorType connectorType;
-
-        private Point transformOrigin;
-        private bool consoleShowing;
-        private bool fullscreenWatchShowing = false;
-        private DynamoController controller;
-        public StringWriter sw;
-        private bool runEnabled = true;
-        protected bool canRunDynamically = true;
-        protected bool debug = false;
-        protected bool dynamicRun = false;
-        
+        private readonly DynamoModel _model;
         private string UnlockLoadPath;
-        private bool uiLocked = true;
-        
-        private string editName = "";
 
         /// <summary>
         /// An observable collection of workspace view models which tracks the model
         /// </summary>
-        private ObservableCollection<dynWorkspaceViewModel> _workspaces = new ObservableCollection<dynWorkspaceViewModel>();
+        private ObservableCollection<dynWorkspaceViewModel> _workspaces =
+            new ObservableCollection<dynWorkspaceViewModel>();
+
+        protected bool canRunDynamically = true;
+
+        private ConnectorType connectorType;
+
+        private bool consoleShowing;
+        private DynamoController controller;
+        protected bool debug = false;
+        protected bool dynamicRun = false;
+
+        private string editName = "";
+        private bool fullscreenWatchShowing;
+        private string logText;
+        private bool runEnabled = true;
+        public StringWriter sw;
+        private Point transformOrigin;
+        private bool uiLocked = true;
 
         public DelegateCommand GoToWikiCommand { get; set; }
         public DelegateCommand GoToSourceCodeCommand { get; set; }
@@ -173,9 +157,7 @@ namespace Dynamo.Controls
                 // NOTE: I couldn't get the binding to work in the XAML so
                 //       this is a temporary hack
                 foreach (dynWorkspaceViewModel workspace in Workspaces)
-                {
                     workspace.FullscreenChanged();
-                }
             }
         }
 
@@ -216,9 +198,7 @@ namespace Dynamo.Controls
 
         public virtual bool DynamicRunEnabled
         {
-            get
-            {
-                return dynamicRun; //selecting debug now toggles this on/off
+            get { return dynamicRun; //selecting debug now toggles this on/off
             }
             set
             {
@@ -246,10 +226,7 @@ namespace Dynamo.Controls
         public int CurrentWorkspaceIndex
         {
             get { return _model.Workspaces.IndexOf(_model.CurrentSpace); }
-            set
-            {
-                _model.CurrentSpace = _model.Workspaces[value];
-            }
+            set { _model.CurrentSpace = _model.Workspaces[value]; }
         }
 
         /// <summary>
@@ -257,26 +234,22 @@ namespace Dynamo.Controls
         /// </summary>
         public dynWorkspaceViewModel CurrentSpaceViewModel
         {
-            get
-            {
-                return Workspaces.First(x => x.Model == _model.CurrentSpace);
-            }
+            get { return Workspaces.First(x => x.Model == _model.CurrentSpace); }
         }
 
         public string EditName
         {
             get { return editName; }
-            set 
-            { 
+            set
+            {
                 editName = value;
                 RaisePropertyChanged("EditName");
             }
-
         }
 
         public Visibility DebugMenuVisibility
         {
-            get 
+            get
             {
                 bool showDebugMenu = false;
 #if DEBUG
@@ -298,6 +271,22 @@ namespace Dynamo.Controls
                 RaisePropertyChanged("IsUILocked");
             }
         }
+
+        public event EventHandler RequestLayoutUpdate;
+        public event EventHandler WorkspaceChanged;
+
+        public virtual void OnRequestLayoutUpdate(object sender, EventArgs e)
+        {
+            if (RequestLayoutUpdate != null)
+                RequestLayoutUpdate(this, e);
+        }
+
+        public virtual void OnWorkspaceChanged(object sender, EventArgs e)
+        {
+            if (WorkspaceChanged != null)
+                WorkspaceChanged(this, e);
+        }
+
         #endregion
 
         public DynamoViewModel(DynamoController controller)
@@ -318,15 +307,27 @@ namespace Dynamo.Controls
             ConnectorType = ConnectorType.BEZIER;
 
             #region Initialize Commands
+
             GoToWikiCommand = new DelegateCommand(GoToWiki, CanGoToWiki);
-            GoToSourceCodeCommand = new DelegateCommand(GoToSourceCode,  CanGoToSourceCode);
+            GoToSourceCodeCommand = new DelegateCommand(GoToSourceCode, CanGoToSourceCode);
             CleanupCommand = new DelegateCommand(Cleanup, CanCleanup);
             ExitCommand = new DelegateCommand(Exit, CanExit);
-            ShowSaveImageDialogAndSaveResultCommand = new DelegateCommand(ShowSaveImageDialogAndSaveResult, CanShowSaveImageDialogAndSaveResult);
-            ShowOpenDialogAndOpenResultCommand = new DelegateCommand(ShowOpenDialogAndOpenResult, CanShowOpenDialogAndOpenResultCommand);
-            ShowSaveDialogIfNeededAndSaveResultCommand = new DelegateCommand(ShowSaveDialogIfNeededAndSaveResult, CanShowSaveDialogIfNeededAndSaveResultCommand);
-            ShowSaveDialogAndSaveResultCommand = new DelegateCommand(ShowSaveDialogAndSaveResult, CanShowSaveDialogAndSaveResultCommand);
-            ShowNewFunctionDialogCommand = new DelegateCommand(ShowNewFunctionDialog, CanShowNewFunctionDialogCommand);
+            ShowSaveImageDialogAndSaveResultCommand =
+                new DelegateCommand(
+                    ShowSaveImageDialogAndSaveResult,
+                    CanShowSaveImageDialogAndSaveResult);
+            ShowOpenDialogAndOpenResultCommand = new DelegateCommand(
+                ShowOpenDialogAndOpenResult,
+                CanShowOpenDialogAndOpenResultCommand);
+            ShowSaveDialogIfNeededAndSaveResultCommand =
+                new DelegateCommand(
+                    ShowSaveDialogIfNeededAndSaveResult,
+                    CanShowSaveDialogIfNeededAndSaveResultCommand);
+            ShowSaveDialogAndSaveResultCommand = new DelegateCommand(
+                ShowSaveDialogAndSaveResult,
+                CanShowSaveDialogAndSaveResultCommand);
+            ShowNewFunctionDialogCommand = new DelegateCommand(
+                ShowNewFunctionDialog, CanShowNewFunctionDialogCommand);
             SaveCommand = new DelegateCommand(Save, CanSave);
             OpenCommand = new DelegateCommand<object>(Open, CanOpen);
             SaveAsCommand = new DelegateCommand<object>(SaveAs, CanSaveAs);
@@ -335,28 +336,71 @@ namespace Dynamo.Controls
             LayoutAllCommand = new DelegateCommand(LayoutAll, CanLayoutAll);
             CopyCommand = new DelegateCommand<object>(Copy, CanCopy);
             PasteCommand = new DelegateCommand<object>(Paste, CanPaste);
-            ToggleConsoleShowingCommand = new DelegateCommand(ToggleConsoleShowing, CanToggleConsoleShowing);
-            ToggleFullscreenWatchShowingCommand = new DelegateCommand(ToggleFullscreenWatchShowing, CanToggleFullscreenWatchShowing);
+            ToggleConsoleShowingCommand = new DelegateCommand(
+                ToggleConsoleShowing, CanToggleConsoleShowing);
+            ToggleFullscreenWatchShowingCommand = new DelegateCommand(
+                ToggleFullscreenWatchShowing,
+                CanToggleFullscreenWatchShowing);
             CancelRunCommand = new DelegateCommand(CancelRun, CanCancelRun);
             SaveImageCommand = new DelegateCommand<object>(SaveImage, CanSaveImage);
             ClearLogCommand = new DelegateCommand(ClearLog, CanClearLog);
-            RunExpressionCommand = new DelegateCommand<object>(RunExpression,CanRunExpression);
-            ShowPackageManagerCommand = new DelegateCommand(ShowPackageManager,CanShowPackageManager);
+            RunExpressionCommand = new DelegateCommand<object>(RunExpression, CanRunExpression);
+            ShowPackageManagerCommand = new DelegateCommand(
+                ShowPackageManager, CanShowPackageManager);
             GoToWorkspaceCommand = new DelegateCommand<object>(GoToWorkspace, CanGoToWorkspace);
-            DisplayFunctionCommand = new DelegateCommand<object>(DisplayFunction, CanDisplayFunction);
-            SetConnectorTypeCommand = new DelegateCommand<object>(SetConnectorType, CanSetConnectorType);
+            DisplayFunctionCommand = new DelegateCommand<object>(
+                DisplayFunction, CanDisplayFunction);
+            SetConnectorTypeCommand = new DelegateCommand<object>(
+                SetConnectorType, CanSetConnectorType);
             CreateNodeCommand = new DelegateCommand<object>(CreateNode, CanCreateNode);
-            CreateConnectionCommand = new DelegateCommand<object>(CreateConnection, CanCreateConnection);
+            CreateConnectionCommand = new DelegateCommand<object>(
+                CreateConnection, CanCreateConnection);
             AddNoteCommand = new DelegateCommand<object>(AddNote, CanAddNote);
             DeleteCommand = new DelegateCommand<object>(Delete, CanDelete);
-            SelectNeighborsCommand = new DelegateCommand<object>(SelectNeighbors, CanSelectNeighbors);
+            SelectNeighborsCommand = new DelegateCommand<object>(
+                SelectNeighbors, CanSelectNeighbors);
             AddToSelectionCommand = new DelegateCommand<object>(AddToSelection, CanAddToSelection);
             PostUIActivationCommand = new DelegateCommand(PostUIActivation, CanDoPostUIActivation);
-            RefactorCustomNodeCommand = new DelegateCommand(RefactorCustomNode, CanRefactorCustomNode);
+            RefactorCustomNodeCommand = new DelegateCommand(
+                RefactorCustomNode, CanRefactorCustomNode);
+
             #endregion
         }
 
-        void _model_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        public virtual bool RunInDebug
+        {
+            get { return debug; }
+            set
+            {
+                debug = value;
+
+                //toggle off dynamic run
+                CanRunDynamically = !debug;
+
+                if (debug)
+                    DynamicRunEnabled = false;
+
+                RaisePropertyChanged("RunInDebug");
+            }
+        }
+
+        public IEnumerable<dynNodeModel> AllNodes
+        {
+            get
+            {
+                return _model.Workspaces.Aggregate(
+                    (IEnumerable<dynNodeModel>)new List<dynNodeModel>(),
+                    (a, x) => a.Concat(x.Nodes))
+                             .Concat(
+                                 Controller.CustomNodeLoader.GetLoadedDefinitions().Aggregate(
+                                     (IEnumerable<dynNodeModel>)new List<dynNodeModel>(),
+                                     (a, x) => a.Concat(x.Workspace.Nodes)
+                                     )
+                    );
+            }
+        }
+
+        private void _model_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == "CurrentSpace")
             {
@@ -365,7 +409,7 @@ namespace Dynamo.Controls
                 RaisePropertyChanged("CurrentSpace");
                 RaisePropertyChanged("BackgroundColor");
                 RaisePropertyChanged("CurrentWorkspaceIndex");
-            } 
+            }
         }
 
         /// <summary>
@@ -378,11 +422,11 @@ namespace Dynamo.Controls
             switch (e.Action)
             {
                 case NotifyCollectionChangedAction.Add:
-                    foreach (var item in e.NewItems)
+                    foreach (object item in e.NewItems)
                         _workspaces.Add(new dynWorkspaceViewModel(item as dynWorkspaceModel, this));
                     break;
                 case NotifyCollectionChangedAction.Remove:
-                    foreach (var item in e.OldItems)
+                    foreach (object item in e.OldItems)
                         _workspaces.Remove(_workspaces.ToList().First(x => x.Model == item));
                     break;
             }
@@ -395,7 +439,7 @@ namespace Dynamo.Controls
 
         private void Open(object parameters)
         {
-            string xmlPath = parameters as string;
+            var xmlPath = parameters as string;
 
             if (!string.IsNullOrEmpty(xmlPath))
             {
@@ -424,36 +468,30 @@ namespace Dynamo.Controls
         {
             return true;
         }
-        
+
         private void ShowSaveImageDialogAndSaveResult()
         {
-            FileDialog _fileDialog = null;
-
-            if (_fileDialog == null)
+            FileDialog fileDialog = new SaveFileDialog
             {
-                _fileDialog = new SaveFileDialog()
-                {
-                    AddExtension = true,
-                    DefaultExt = ".png",
-                    FileName = "Capture.png",
-                    Filter = "PNG Image|*.png",
-                    Title = "Save your Workbench to an Image",
-                };
-            }
+                AddExtension = true,
+                DefaultExt = ".png",
+                FileName = "Capture.png",
+                Filter = "PNG Image|*.png",
+                Title = "Save your Workbench to an Image",
+            };
 
             // if you've got the current space path, use it as the inital dir
             if (!string.IsNullOrEmpty(_model.CurrentSpace.FilePath))
             {
                 var fi = new FileInfo(_model.CurrentSpace.FilePath);
-                _fileDialog.InitialDirectory = fi.DirectoryName;
+                fileDialog.InitialDirectory = fi.DirectoryName;
             }
 
-            if (_fileDialog.ShowDialog() == DialogResult.OK)
+            if (fileDialog.ShowDialog() == DialogResult.OK)
             {
-                if (SaveImageCommand.CanExecute(_fileDialog.FileName))
-                    SaveImageCommand.Execute(_fileDialog.FileName);
+                if (SaveImageCommand.CanExecute(fileDialog.FileName))
+                    SaveImageCommand.Execute(fileDialog.FileName);
             }
-        
         }
 
         private bool CanShowSaveImageDialogAndSaveResult()
@@ -463,32 +501,27 @@ namespace Dynamo.Controls
 
         private void ShowOpenDialogAndOpenResult()
         {
-            FileDialog _fileDialog = null;
-
-            if (_fileDialog == null)
+            FileDialog fileDialog = new OpenFileDialog
             {
-                _fileDialog = new OpenFileDialog()
-                {
-                    Filter = "Dynamo Definitions (*.dyn; *.dyf)|*.dyn;*.dyf|All files (*.*)|*.*",
-                    Title = "Open Dynamo Definition..."
-                };
-            }
+                Filter = "Dynamo Definitions (*.dyn; *.dyf)|*.dyn;*.dyf|All files (*.*)|*.*",
+                Title = "Open Dynamo Definition..."
+            };
 
             // if you've got the current space path, use it as the inital dir
             if (!string.IsNullOrEmpty(_model.CurrentSpace.FilePath))
             {
                 var fi = new FileInfo(_model.CurrentSpace.FilePath);
-                _fileDialog.InitialDirectory = fi.DirectoryName;
+                fileDialog.InitialDirectory = fi.DirectoryName;
             }
 
-            if (_fileDialog.ShowDialog() == DialogResult.OK)
+            if (fileDialog.ShowDialog() == DialogResult.OK)
             {
-                if (OpenCommand.CanExecute(_fileDialog.FileName))
-                    OpenCommand.Execute(_fileDialog.FileName);
+                if (OpenCommand.CanExecute(fileDialog.FileName))
+                    OpenCommand.Execute(fileDialog.FileName);
             }
         }
 
-        private bool CanShowOpenDialogAndOpenResultCommand()
+        private static bool CanShowOpenDialogAndOpenResultCommand()
         {
             return true;
         }
@@ -497,17 +530,17 @@ namespace Dynamo.Controls
         {
             if (_model.CurrentSpace.FilePath != null)
             {
-                if(SaveCommand.CanExecute())
+                if (SaveCommand.CanExecute())
                     SaveCommand.Execute();
             }
             else
             {
-                if(ShowSaveDialogAndSaveResultCommand.CanExecute())
+                if (ShowSaveDialogAndSaveResultCommand.CanExecute())
                     ShowSaveDialogAndSaveResultCommand.Execute();
             }
         }
 
-        private bool CanShowSaveDialogIfNeededAndSaveResultCommand()
+        private static bool CanShowSaveDialogIfNeededAndSaveResultCommand()
         {
             return true;
         }
@@ -520,7 +553,7 @@ namespace Dynamo.Controls
             };
 
             string ext, fltr;
-            if ( workspace == _model.HomeSpace )
+            if (workspace == _model.HomeSpace)
             {
                 ext = ".dyn";
                 fltr = "Dynamo Workspace (*.dyn)|*.dyn";
@@ -542,22 +575,20 @@ namespace Dynamo.Controls
 
         private void ShowSaveDialogAndSaveResult()
         {
-            FileDialog _fileDialog = GetSaveDialog(_model.CurrentSpace);
+            FileDialog fileDialog = GetSaveDialog(_model.CurrentSpace);
 
             //if the xmlPath is not empty set the default directory
             if (!string.IsNullOrEmpty(_model.CurrentSpace.FilePath))
             {
                 var fi = new FileInfo(_model.CurrentSpace.FilePath);
-                _fileDialog.InitialDirectory = fi.DirectoryName;
+                fileDialog.InitialDirectory = fi.DirectoryName;
             }
 
-            if (_fileDialog.ShowDialog() == DialogResult.OK)
-            {
-                SaveAs(_fileDialog.FileName);
-            }
+            if (fileDialog.ShowDialog() == DialogResult.OK)
+                SaveAs(fileDialog.FileName);
         }
 
-        private bool CanShowSaveDialogAndSaveResultCommand()
+        private static bool CanShowSaveDialogAndSaveResultCommand()
         {
             return true;
         }
@@ -570,70 +601,46 @@ namespace Dynamo.Controls
 
             do
             {
-                var dialog = new FunctionNamePrompt(dynSettings.Controller.SearchViewModel.Categories, error);
+                var dialog =
+                    new FunctionNamePrompt(dynSettings.Controller.SearchViewModel.Categories, error);
                 if (dialog.ShowDialog() != true)
-                {
                     return;
-                }
 
                 name = dialog.Text;
                 category = dialog.Category;
 
                 if (Controller.CustomNodeLoader.Contains(name))
-                {
                     error = "A function with this name already exists.";
-                }
                 else if (category.Equals(""))
-                {
                     error = "Please enter a valid category.";
-                }
                 else
-                {
                     error = "";
-                }
             } while (!error.Equals(""));
 
             NewFunction(Guid.NewGuid(), name, category, true);
         }
 
-        private bool CanShowNewFunctionDialogCommand()
+        private static bool CanShowNewFunctionDialogCommand()
         {
             return true;
         }
 
-        public virtual bool RunInDebug
-        {
-            get { return debug; }
-            set
-            {
-                debug = value;
-
-                //toggle off dynamic run
-                CanRunDynamically = !debug;
-
-                if (debug)
-                    DynamicRunEnabled = false;
-
-                RaisePropertyChanged("RunInDebug");
-            }
-        }
-
-        private void GoToWiki()
+        private static void GoToWiki()
         {
             Process.Start("https://github.com/ikeough/Dynamo/wiki");
         }
 
-        private bool CanGoToWiki()
+        private static bool CanGoToWiki()
         {
             return true;
         }
 
-        private void GoToSourceCode()
+        private static void GoToSourceCode()
         {
             Process.Start("https://github.com/ikeough/Dynamo");
         }
 
-        private bool CanGoToSourceCode()
+        private static bool CanGoToSourceCode()
         {
             return true;
         }
@@ -646,16 +653,12 @@ namespace Dynamo.Controls
         private void ShowSaveDialogIfNeededAndSave(dynWorkspaceModel workspace)
         {
             if (workspace.FilePath != null)
-            {
-                this.SaveAs(workspace.FilePath, workspace);
-            }
+                SaveAs(workspace.FilePath, workspace);
             else
             {
-                var fd = this.GetSaveDialog(workspace);
+                FileDialog fd = GetSaveDialog(workspace);
                 if (fd.ShowDialog() == DialogResult.OK)
-                {
-                    this.SaveAs(fd.FileName, workspace);
-                }
+                    SaveAs(fd.FileName, workspace);
             }
         }
 
@@ -666,14 +669,20 @@ namespace Dynamo.Controls
         /// <returns>False if the user cancels, otherwise true</returns>
         public bool AskUserToSaveWorkspaceOrCancel(dynWorkspaceModel workspace)
         {
-            var result = System.Windows.MessageBox.Show("You have unsaved changes to " + workspace.Name + "\n\n Would you like to save your changes?", "Confirmation", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-            if (result == MessageBoxResult.Yes)
+            MessageBoxResult result =
+                MessageBox.Show(
+                    "You have unsaved changes to " + workspace.Name
+                    + "\n\n Would you like to save your changes?",
+                    "Confirmation",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+            switch (result)
             {
-                this.ShowSaveDialogIfNeededAndSave(workspace);
-            }
-            else if (result == MessageBoxResult.Cancel)
-            {
-                return false;
+                case MessageBoxResult.Yes:
+                    ShowSaveDialogIfNeededAndSave(workspace);
+                    break;
+                case MessageBoxResult.Cancel:
+                    return false;
             }
             return true;
         }
@@ -684,12 +693,8 @@ namespace Dynamo.Controls
         /// <returns>Whether the cleanup was completed or cancelled.</returns>
         public bool AskUserToSaveWorkspacesOrCancel()
         {
-            foreach (var wvm in Workspaces.Where((wvm) => wvm.Model.HasUnsavedChanges))
-            {
-                if (!AskUserToSaveWorkspaceOrCancel(wvm.Model))
-                    return false;
-            }
-            return true;
+            return Workspaces.Where(wvm => wvm.Model.HasUnsavedChanges)
+                             .All(wvm => AskUserToSaveWorkspaceOrCancel(wvm.Model));
         }
 
         public void Cleanup()
@@ -697,7 +702,7 @@ namespace Dynamo.Controls
             DynamoLogger.Instance.FinishLogging();
         }
 
-        private bool CanCleanup()
+        private static bool CanCleanup()
         {
             return true;
         }
@@ -706,11 +711,11 @@ namespace Dynamo.Controls
         {
             if (!AskUserToSaveWorkspacesOrCancel())
                 return;
-            this.Cleanup();
+            Cleanup();
             dynSettings.Bench.Close();
         }
 
-        private bool CanExit()
+        private static bool CanExit()
         {
             return true;
         }
@@ -720,7 +725,7 @@ namespace Dynamo.Controls
             SaveAs(parameters.ToString());
         }
 
-        private bool CanSaveAs(object parameters)
+        private static bool CanSaveAs(object parameters)
         {
             return true;
         }
@@ -737,7 +742,7 @@ namespace Dynamo.Controls
             IsUILocked = false;
         }
 
-        private bool CanClear()
+        private static bool CanClear()
         {
             return true;
         }
@@ -760,14 +765,14 @@ namespace Dynamo.Controls
 
             double x = 0;
             double y = 0;
-            double maxWidth = 0;    //track max width of current column
-            double colGutter = 40;     //the space between columns
-            double rowGutter = 40;
+            double maxWidth = 0; //track max width of current column
+            const double colGutter = 40; //the space between columns
+            const double rowGutter = 40;
             int colCount = 0;
 
-            Hashtable typeHash = new Hashtable();
+            var typeHash = new Hashtable();
 
-            foreach (KeyValuePair<string, TypeLoadData> kvp in dynSettings.Controller.BuiltInTypesByNickname)
+            foreach (var kvp in dynSettings.Controller.BuiltInTypesByNickname)
             {
                 Type t = kvp.Value.Type;
 
@@ -778,14 +783,12 @@ namespace Dynamo.Controls
                     attribs.Length > 0 &&
                     t.IsSubclassOf(typeof(dynNodeModel)))
                 {
-                    NodeCategoryAttribute elCatAttrib = attribs[0] as NodeCategoryAttribute;
+                    var elCatAttrib = attribs[0] as NodeCategoryAttribute;
 
                     List<Type> catTypes = null;
 
                     if (typeHash.ContainsKey(elCatAttrib.ElementCategory))
-                    {
                         catTypes = typeHash[elCatAttrib.ElementCategory] as List<Type>;
-                    }
                     else
                     {
                         catTypes = new List<Type>();
@@ -798,33 +801,40 @@ namespace Dynamo.Controls
 
             foreach (DictionaryEntry de in typeHash)
             {
-                List<Type> catTypes = de.Value as List<Type>;
+                var catTypes = de.Value as List<Type>;
 
                 //add the name of the category here
                 //AddNote(de.Key.ToString(), x, y, ViewModel.CurrentSpace);
-                Dictionary<string, object> paramDict = new Dictionary<string, object>();
-                paramDict.Add("x", x);
-                paramDict.Add("y", y);
-                paramDict.Add("text", de.Key.ToString());
-                paramDict.Add("workspace", _model.CurrentSpace);
+                var paramDict = new Dictionary<string, object>
+                {
+                    { "x", x },
+                    { "y", y },
+                    { "text", de.Key.ToString() },
+                    { "workspace", _model.CurrentSpace }
+                };
 
-                if(AddNoteCommand.CanExecute(paramDict))
+                if (AddNoteCommand.CanExecute(paramDict))
                     AddNoteCommand.Execute(paramDict);
 
                 y += 60;
 
-                foreach (Type t in catTypes)
+                double x1 = x;
+                double y1 = y;
+                var query = from t in catTypes
+                            let attribs = t.GetCustomAttributes(typeof(NodeNameAttribute), false)
+                            let elNameAttrib = attribs[0] as NodeNameAttribute
+                            select CreateInstanceAndAddNodeToWorkspace(
+                                t,
+                                elNameAttrib.Name,
+                                Guid.NewGuid(),
+                                x1,
+                                y1,
+                                _model.CurrentSpace)
+                            into el
+                            where el != null
+                            select el;
+                foreach (dynNodeModel el in query)
                 {
-                    object[] attribs = t.GetCustomAttributes(typeof(NodeNameAttribute), false);
-
-                    NodeNameAttribute elNameAttrib = attribs[0] as NodeNameAttribute;
-                    dynNodeModel el = CreateInstanceAndAddNodeToWorkspace(
-                           t, elNameAttrib.Name, Guid.NewGuid(), x, y,
-                           _model.CurrentSpace
-                        );
-
-                    if (el == null) continue;
-
                     el.DisableReporting();
 
                     maxWidth = Math.Max(el.Width, maxWidth);
@@ -846,71 +856,67 @@ namespace Dynamo.Controls
                 colCount = 0;
                 x += maxWidth + colGutter;
                 maxWidth = 0;
-
             }
 
             IsUILocked = false;
         }
 
-        private bool CanLayoutAll()
+        private static bool CanLayoutAll()
         {
             return true;
         }
-    
-        private void Copy(object parameters)
+
+        private static void Copy(object parameters)
         {
             dynSettings.Controller.ClipBoard.Clear();
 
-            foreach (ISelectable sel in DynamoSelection.Instance.Selection)
+            var query =
+                DynamoSelection.Instance.Selection.OfType<dynModelBase>()
+                               .Where(el => !dynSettings.Controller.ClipBoard.Contains(el));
+            foreach (var el in query)
             {
-                //MVVM : selection and clipboard now hold view model objects
-                //UIElement el = sel as UIElement;
-                dynModelBase el = sel as dynModelBase;
-                if (el != null)
+                dynSettings.Controller.ClipBoard.Add(el);
+
+                //dynNodeView n = el as dynNodeView;
+                var n = el as dynNodeModel;
+                if (n != null)
                 {
-                    if (!dynSettings.Controller.ClipBoard.Contains(el))
-                    {
-                        dynSettings.Controller.ClipBoard.Add(el);
+                    IEnumerable<dynConnectorModel> connectors =
+                        n.InPorts.ToList().SelectMany(x => x.Connectors)
+                         .Concat(
+                             n.OutPorts.ToList()
+                              .SelectMany(x => x.Connectors))
+                         .Where(
+                             x => x.End != null &&
+                                  x.End.Owner.IsSelected &&
+                                  !dynSettings.Controller.ClipBoard
+                                              .Contains(x));
 
-                        //dynNodeView n = el as dynNodeView;
-                        dynNodeModel n = el as dynNodeModel;
-                        if (n != null)
-                        {
-                            var connectors = n.InPorts.ToList().SelectMany(x => x.Connectors)
-                                .Concat(n.OutPorts.ToList().SelectMany(x => x.Connectors))
-                                .Where(x => x.End != null &&
-                                    x.End.Owner.IsSelected &&
-                                    !dynSettings.Controller.ClipBoard.Contains(x));
-
-                            dynSettings.Controller.ClipBoard.AddRange(connectors);
-                        }
-                    }
+                    dynSettings.Controller.ClipBoard.AddRange(connectors);
                 }
             }
         }
 
-        private bool CanCopy(object parameters)
+        private static bool CanCopy(object parameters)
         {
-            if (DynamoSelection.Instance.Selection.Count == 0)
-            {
-                return false;
-            }
-            return true;
+            return DynamoSelection.Instance.Selection.Count != 0;
         }
 
         private void Paste(object parameters)
         {
             //make a lookup table to store the guids of the
             //old nodes and the guids of their pasted versions
-            Hashtable nodeLookup = new Hashtable();
+            var nodeLookup = new Hashtable();
 
             //clear the selection so we can put the
             //paste contents in
             DynamoSelection.Instance.Selection.RemoveAll();
 
-            var nodes = dynSettings.Controller.ClipBoard.Select(x => x).Where(x => x is dynNodeModel);
+            IEnumerable<dynNodeModel> nodes =
+                dynSettings.Controller.ClipBoard.Select(x => x).OfType<dynNodeModel>();
 
-            var connectors = dynSettings.Controller.ClipBoard.Select(x => x).Where(x => x is dynConnectorModel);
+            IEnumerable<dynConnectorModel> connectors =
+                dynSettings.Controller.ClipBoard.Select(x => x).OfType<dynConnectorModel>();
 
             foreach (dynNodeModel node in nodes)
             {
@@ -918,28 +924,26 @@ namespace Dynamo.Controls
                 Guid newGuid = Guid.NewGuid();
                 nodeLookup.Add(node.GUID, newGuid);
 
-                var nodeData = new Dictionary<string, object>();
-                nodeData.Add("x", node.X);
-                nodeData.Add("y", node.Y + 100);
-                if(node is dynFunction)
+                var nodeData = new Dictionary<string, object>
+                {
+                    { "x", node.X },
+                    { "y", node.Y + 100 }
+                };
+
+                if (node is dynFunction)
                     nodeData.Add("name", (node as dynFunction).Definition.FunctionId);
                 else
                     nodeData.Add("name", node.NickName);
+
                 nodeData.Add("guid", newGuid);
 
-                if (typeof(dynBasicInteractive<double>).IsAssignableFrom(node.GetType()))
-                {
+                if (node is dynBasicInteractive<double>)
                     nodeData.Add("value", (node as dynBasicInteractive<double>).Value);
-                }
-                else if (typeof(dynBasicInteractive<string>).IsAssignableFrom(node.GetType()))
-                {
+                else if (node is dynBasicInteractive<string>)
                     nodeData.Add("value", (node as dynBasicInteractive<string>).Value);
-                }
-                else if (typeof(dynBasicInteractive<bool>).IsAssignableFrom(node.GetType()))
-                {
+                else if (node is dynBasicInteractive<bool>)
                     nodeData.Add("value", (node as dynBasicInteractive<bool>).Value);
-                }
-                else if (typeof(dynVariableInput).IsAssignableFrom(node.GetType()))
+                else if (node is dynVariableInput)
                 {
                     //for list type nodes send the number of ports
                     //as the value - so we can setup the new node with
@@ -947,7 +951,8 @@ namespace Dynamo.Controls
                     nodeData.Add("value", node.InPorts.Count);
                 }
 
-                dynSettings.Controller.CommandQueue.Enqueue(Tuple.Create<object, object>(CreateNodeCommand, nodeData));
+                dynSettings.Controller.CommandQueue.Enqueue(
+                    Tuple.Create<object, object>(CreateNodeCommand, nodeData));
             }
 
             //process the command queue so we have 
@@ -961,37 +966,38 @@ namespace Dynamo.Controls
 
             foreach (dynConnectorModel c in connectors)
             {
-                Dictionary<string, object> connectionData = new Dictionary<string, object>();
+                var connectionData = new Dictionary<string, object>();
 
-                dynNodeModel startNode = null;
+                dynNodeModel startNode;
 
                 try
                 {
-                    startNode = _model.CurrentSpace.Nodes
-                        .Where(x => x.GUID == (Guid)nodeLookup[c.Start.Owner.GUID]).FirstOrDefault();
+                    startNode = _model.CurrentSpace.Nodes.FirstOrDefault(
+                        x => x.GUID == (Guid)nodeLookup[c.Start.Owner.GUID]);
                 }
                 catch
                 {
                     //don't let users paste connectors between workspaces
                     if (c.Start.Owner.WorkSpace == _model.CurrentSpace)
-                    {
                         startNode = c.Start.Owner;
-                    }
                     else
-                    {
                         continue;
-                    }
-
                 }
 
                 connectionData.Add("start", startNode);
 
-                connectionData.Add("end", _model.CurrentSpace.Nodes.FirstOrDefault(x => x.GUID == (Guid)nodeLookup[c.End.Owner.GUID]));
+                connectionData.Add(
+                    "end",
+                    _model.CurrentSpace.Nodes.FirstOrDefault(
+                        x => x.GUID == (Guid)nodeLookup[c.End.Owner.GUID]));
 
                 connectionData.Add("port_start", c.Start.Index);
                 connectionData.Add("port_end", c.End.Index);
 
-                dynSettings.Controller.CommandQueue.Enqueue(Tuple.Create<object, object>(CreateConnectionCommand, connectionData));
+                dynSettings.Controller.CommandQueue.Enqueue(
+                    Tuple.Create<object, object>(
+                        CreateConnectionCommand,
+                        connectionData));
             }
 
             //process the queue again to create the connectors
@@ -999,8 +1005,14 @@ namespace Dynamo.Controls
 
             foreach (DictionaryEntry de in nodeLookup)
             {
-                dynSettings.Controller.CommandQueue.Enqueue(Tuple.Create<object, object>(AddToSelectionCommand,
-                    _model.CurrentSpace.Nodes.FirstOrDefault(x => x.GUID == (Guid)de.Value)));
+                dynSettings.Controller.CommandQueue.Enqueue(
+                    Tuple.Create<object, object>(
+                        AddToSelectionCommand,
+                        _model.CurrentSpace.Nodes
+                              .FirstOrDefault(
+                                  x =>
+                                  x.GUID ==
+                                  (Guid)de.Value)));
             }
 
             dynSettings.Controller.ProcessCommandQueue();
@@ -1008,69 +1020,49 @@ namespace Dynamo.Controls
             //dynSettings.ViewModel.ClipBoard.Clear();
         }
 
-        private bool CanPaste(object parameters)
+        private static bool CanPaste(object parameters)
         {
-            if (dynSettings.Controller.ClipBoard.Count == 0)
-            {
-                return false;
-            }
-
-            return true;
+            return dynSettings.Controller.ClipBoard.Count != 0;
         }
 
         private void ToggleConsoleShowing()
         {
-            if (ConsoleShowing)
-            {
-                ConsoleShowing = false;
-            }
-            else
-            {
-                ConsoleShowing = true;
-            }
+            ConsoleShowing = !ConsoleShowing;
         }
 
-        private bool CanToggleConsoleShowing()
+        private static bool CanToggleConsoleShowing()
         {
             return true;
         }
 
         private void ToggleFullscreenWatchShowing()
         {
-            if (FullscreenWatchShowing)
-            {
-                FullscreenWatchShowing = false;
-            }
-            else
-            {
-                FullscreenWatchShowing = true;
-            }
+            FullscreenWatchShowing = !FullscreenWatchShowing;
         }
 
-        private bool CanToggleFullscreenWatchShowing()
+        private static bool CanToggleFullscreenWatchShowing()
         {
             return true;
         }
 
-        private void CancelRun()
+        private static void CancelRun()
         {
             dynSettings.Controller.RunCancelled = true;
         }
 
-        private bool CanCancelRun()
+        private static bool CanCancelRun()
         {
             return true;
         }
 
         private void SaveImage(object parameters)
         {
-            string imagePath = parameters as string;
+            var imagePath = parameters as string;
 
             if (!string.IsNullOrEmpty(imagePath))
             {
-                Transform trans = dynSettings.Workbench.LayoutTransform;
                 dynSettings.Workbench.LayoutTransform = null;
-                Size size = new Size(dynSettings.Workbench.Width, dynSettings.Workbench.Height);
+                var size = new Size(dynSettings.Workbench.Width, dynSettings.Workbench.Height);
                 dynSettings.Workbench.Measure(size);
                 dynSettings.Workbench.Arrange(new Rect(size));
 
@@ -1085,14 +1077,18 @@ namespace Dynamo.Controls
 
                 Rect rect = VisualTreeHelper.GetDescendantBounds(dynSettings.Bench.border);
 
-                RenderTargetBitmap rtb = new RenderTargetBitmap((int)rect.Right + 50,
-                  (int)rect.Bottom + 50, 96, 96, System.Windows.Media.PixelFormats.Default);
+                var rtb = new RenderTargetBitmap(
+                    (int)rect.Right + 50,
+                    (int)rect.Bottom + 50,
+                    96,
+                    96,
+                    PixelFormats.Default);
                 rtb.Render(dynSettings.Workbench);
                 //endcode as PNG
                 BitmapEncoder pngEncoder = new PngBitmapEncoder();
                 pngEncoder.Frames.Add(BitmapFrame.Create(rtb));
 
-                using (var stm = File.Create(imagePath))
+                using (FileStream stm = File.Create(imagePath))
                 {
                     pngEncoder.Save(stm);
                 }
@@ -1128,9 +1124,7 @@ namespace Dynamo.Controls
         private bool CanRunExpression(object parameters)
         {
             if (dynSettings.Controller == null)
-            {
                 return false;
-            }
             return true;
         }
 
@@ -1147,9 +1141,11 @@ namespace Dynamo.Controls
 
         private void GoToWorkspace(object parameter)
         {
-            if (parameter is Guid && dynSettings.Controller.CustomNodeLoader.Contains((Guid)parameter))
+            if (parameter is Guid
+                && dynSettings.Controller.CustomNodeLoader.Contains((Guid)parameter))
             {
-                ViewCustomNodeWorkspace( dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition((Guid)parameter) );
+                ViewCustomNodeWorkspace(
+                    dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition((Guid)parameter));
             }
         }
 
@@ -1163,52 +1159,38 @@ namespace Dynamo.Controls
             Controller.CustomNodeLoader.GetFunctionDefinition((Guid)parameters);
         }
 
-        private bool CanDisplayFunction(object parameters)
-        { 
-            var id = dynSettings.CustomNodes.FirstOrDefault(x => x.Value == (Guid) parameters).Value;
+        private static bool CanDisplayFunction(object parameters)
+        {
+            Guid id = dynSettings.CustomNodes.FirstOrDefault(x => x.Value == (Guid)parameters).Value;
 
-            if (id!=null)
-                return true;
-
-            return false;
+            return id != default(Guid);
         }
 
         private void SetConnectorType(object parameters)
         {
-            if (parameters.ToString() == "BEZIER")
-            {
-                connectorType = ConnectorType.BEZIER;
-            }
-            else
-            {
-                connectorType = ConnectorType.POLYLINE;
-            }
+            connectorType = parameters.ToString() == "BEZIER"
+                                ? ConnectorType.BEZIER
+                                : ConnectorType.POLYLINE;
         }
 
-        private bool CanSetConnectorType(object parameters)
+        private static bool CanSetConnectorType(object parameters)
         {
             //parameter object will be BEZIER or POLYLINE
-            if (string.IsNullOrEmpty(parameters.ToString()))
-            {
-                return false;
-            }
-            return true;
+            return !string.IsNullOrEmpty(parameters.ToString());
         }
 
-        void CreateNode(object parameters)
+        private void CreateNode(object parameters)
         {
             var data = parameters as Dictionary<string, object>;
             if (data == null)
-            {
                 return;
-            }
 
             dynNodeModel node = CreateNode(data["name"].ToString());
             if (node == null)
             {
                 DynamoCommands.WriteToLogCmd.Execute("Failed to create the node");
                 return;
-            } 
+            }
 
             _model.CurrentSpace.Nodes.Add(node);
             node.WorkSpace = dynSettings.Controller.DynamoViewModel.CurrentSpace;
@@ -1217,29 +1199,21 @@ namespace Dynamo.Controls
             //try to set the value on the node
             if (data.ContainsKey("value"))
             {
-                if (typeof(dynBasicInteractive<double>).IsAssignableFrom(node.GetType()))
-                {
+                if (node is dynBasicInteractive<double>)
                     (node as dynBasicInteractive<double>).Value = (double)data["value"];
-                }
-                else if (typeof(dynBasicInteractive<string>).IsAssignableFrom(node.GetType()))
-                {
+                else if (node is dynBasicInteractive<string>)
                     (node as dynBasicInteractive<string>).Value = data["value"].ToString();
-                }
-                else if (typeof(dynBasicInteractive<bool>).IsAssignableFrom(node.GetType()))
-                {
+                else if (node is dynBasicInteractive<bool>)
                     (node as dynBasicInteractive<bool>).Value = (bool)data["value"];
-                }
-                else if (typeof(dynVariableInput).IsAssignableFrom(node.GetType()))
+                else if (node is dynVariableInput)
                 {
-                    int desiredPortCount = (int)data["value"];
+                    var desiredPortCount = (int)data["value"];
                     if (node.InPortData.Count < desiredPortCount)
                     {
                         int portsToCreate = desiredPortCount - node.InPortData.Count;
 
                         for (int i = 0; i < portsToCreate; i++)
-                        {
                             (node as dynVariableInput).AddInput();
-                        }
                         (node as dynVariableInput).RegisterAllPorts();
                     }
                 }
@@ -1248,25 +1222,21 @@ namespace Dynamo.Controls
             //override the guid so we can store
             //for connection lookup
             if (data.ContainsKey("guid"))
-            {
                 node.GUID = (Guid)data["guid"];
-            }
             else
-            {
                 node.GUID = Guid.NewGuid();
-            }
 
-            dynSettings.Controller.DynamoViewModel.CurrentSpaceViewModel.OnRequestNodeCentered(this, new NodeEventArgs(node, data));
+            dynSettings.Controller.DynamoViewModel.CurrentSpaceViewModel.OnRequestNodeCentered(
+                this,
+                new NodeEventArgs(node, data));
 
             node.EnableInteraction();
 
             if (ViewingHomespace)
-            {
                 node.SaveResult = true;
-            }
         }
 
-        bool CanCreateNode(object parameters)
+        private bool CanCreateNode(object parameters)
         {
             var data = parameters as Dictionary<string, object>;
 
@@ -1274,40 +1244,34 @@ namespace Dynamo.Controls
                 return false;
 
             Guid guid;
-            var name = data["name"].ToString();
+            string name = data["name"].ToString();
 
-            if (dynSettings.Controller.BuiltInTypesByNickname.ContainsKey(name)
-                    || dynSettings.Controller.BuiltInTypesByName.ContainsKey(name)
-                    || (Guid.TryParse(name, out guid) && dynSettings.Controller.CustomNodeLoader.Contains(guid)))
-            {
-                return true;
-            }
-
-            return false;
+            return dynSettings.Controller.BuiltInTypesByNickname.ContainsKey(name)
+                   || dynSettings.Controller.BuiltInTypesByName.ContainsKey(name)
+                   || (Guid.TryParse(name, out guid)
+                       && dynSettings.Controller.CustomNodeLoader.Contains(guid));
         }
 
-        void CreateConnection(object parameters)
+        private void CreateConnection(object parameters)
         {
-            Dictionary<string, object> connectionData = parameters as Dictionary<string, object>;
+            var connectionData = parameters as Dictionary<string, object>;
 
-            dynNodeModel start = (dynNodeModel)connectionData["start"];
-            dynNodeModel end = (dynNodeModel)connectionData["end"];
-            int startIndex = (int)connectionData["port_start"];
-            int endIndex = (int)connectionData["port_end"];
+            var start = (dynNodeModel)connectionData["start"];
+            var end = (dynNodeModel)connectionData["end"];
+            var startIndex = (int)connectionData["port_start"];
+            var endIndex = (int)connectionData["port_end"];
 
-            dynConnectorModel c = new dynConnectorModel(start, end, startIndex, endIndex, 0);
+            var c = new dynConnectorModel(start, end, startIndex, endIndex, 0);
 
             _model.CurrentSpace.Connectors.Add(c);
         }
 
-        bool CanCreateConnection(object parameters)
+        private static bool CanCreateConnection(object parameters)
         {
             //make sure you have valid connection data
-            Dictionary<string, object> connectionData = parameters as Dictionary<string, object>;
+            var connectionData = parameters as Dictionary<string, object>;
             if (connectionData != null && connectionData.Count == 4)
-            {
                 return true;
-            }
 
             return false;
         }
@@ -1317,33 +1281,25 @@ namespace Dynamo.Controls
             //if you get an object in the parameters, just delete that object
             if (parameters != null)
             {
-                dynNoteModel note = parameters as dynNoteModel;
-                dynNodeModel node = parameters as dynNodeModel;
+                var note = parameters as dynNoteModel;
+                var node = parameters as dynNodeModel;
 
                 if (node != null)
-                {
                     DeleteNodeAndItsConnectors(node);
-                }
                 else if (note != null)
-                {
                     DeleteNote(note);
-                }
             }
             else
             {
                 for (int i = DynamoSelection.Instance.Selection.Count - 1; i >= 0; i--)
                 {
-                    dynNoteModel note = DynamoSelection.Instance.Selection[i] as dynNoteModel;
-                    dynNodeModel node = DynamoSelection.Instance.Selection[i] as dynNodeModel;
+                    var note = DynamoSelection.Instance.Selection[i] as dynNoteModel;
+                    var node = DynamoSelection.Instance.Selection[i] as dynNodeModel;
 
                     if (node != null)
-                    {
                         DeleteNodeAndItsConnectors(node);
-                    }
                     else if (note != null)
-                    {
                         DeleteNote(note);
-                    }
                 }
             }
         }
@@ -1358,8 +1314,8 @@ namespace Dynamo.Controls
             var inputs = (Dictionary<string, object>)parameters;
 
             // by default place note at center
-            var x = 0.0;
-            var y = 0.0;
+            double x = 0.0;
+            double y = 0.0;
 
             if (inputs != null && inputs.ContainsKey("x"))
                 x = (double)inputs["x"];
@@ -1368,18 +1324,22 @@ namespace Dynamo.Controls
                 y = (double)inputs["y"];
 
 
-            var n = new dynNoteModel(x, y);
+            var n = new dynNoteModel(x, y)
+            {
+                Text =
+                    (inputs == null || !inputs.ContainsKey("text"))
+                        ? "New Note"
+                        : inputs["text"].ToString()
+            };
 
-            n.Text = (inputs == null || !inputs.ContainsKey("text")) ? "New Note" : inputs["text"].ToString();
-            var ws = (inputs == null || !inputs.ContainsKey("workspace")) ? _model.CurrentSpace : (dynWorkspaceModel)inputs["workspace"];
+            dynWorkspaceModel ws = (inputs == null || !inputs.ContainsKey("workspace"))
+                                       ? _model.CurrentSpace
+                                       : (dynWorkspaceModel)inputs["workspace"];
 
             ws.Notes.Add(n);
-            
+
             if (!ViewingHomespace)
-            {
                 _model.CurrentSpace.Modified();
-            }
-            
         }
 
         private bool CanAddNote(object parameters)
@@ -1395,12 +1355,10 @@ namespace Dynamo.Controls
 
         private void SelectNeighbors(object parameters)
         {
-            List<ISelectable> sels = DynamoSelection.Instance.Selection.ToList<ISelectable>();
+            List<ISelectable> sels = DynamoSelection.Instance.Selection.ToList();
 
             foreach (ISelectable sel in sels)
-            {
                 ((dynNodeModel)sel).SelectNeighbors();
-            }
         }
 
         private bool CanSelectNeighbors(object parameters)
@@ -1410,7 +1368,7 @@ namespace Dynamo.Controls
 
         private static void DeleteNodeAndItsConnectors(dynNodeModel node)
         {
-            foreach (var conn in node.AllConnectors().ToList())
+            foreach (dynConnectorModel conn in node.AllConnectors().ToList())
             {
                 conn.NotifyConnectedPortsOfDeletion();
                 dynSettings.Controller.DynamoViewModel.Model.CurrentSpace.Connectors.Remove(conn);
@@ -1423,11 +1381,11 @@ namespace Dynamo.Controls
             node.WorkSpace.Nodes.Remove(node);
         }
 
-        private void AddToSelection(object parameters)
+        private static void AddToSelection(object parameters)
         {
             var node = parameters as dynNodeModel;
 
-            if (!node.IsSelected)
+            if (node != null && !node.IsSelected)
             {
                 if (!DynamoSelection.Instance.Selection.Contains(node))
                     DynamoSelection.Instance.Selection.Add(node);
@@ -1436,11 +1394,9 @@ namespace Dynamo.Controls
 
         private bool CanAddToSelection(object parameters)
         {
-            dynNodeModel node = parameters as dynNodeModel;
+            var node = parameters as dynNodeModel;
             if (node == null)
-            {
                 return false;
-            }
 
             return true;
         }
@@ -1456,11 +1412,9 @@ namespace Dynamo.Controls
         {
             sw.WriteLine(message);
             LogText = sw.ToString();
-           
+
             if (DynamoCommands.WriteToLogCmd.CanExecute(null))
-            {
                 DynamoCommands.WriteToLogCmd.Execute(message);
-            }
 
             //MVVM: Replaced with event handler on source changed
             //if (LogScroller != null)
@@ -1469,7 +1423,8 @@ namespace Dynamo.Controls
 
         private void PostUIActivation()
         {
-            DynamoLoader.LoadCustomNodes(dynSettings.Bench, Controller.CustomNodeLoader, Controller.SearchViewModel);
+            DynamoLoader.LoadCustomNodes(
+                dynSettings.Bench, Controller.CustomNodeLoader, Controller.SearchViewModel);
 
             dynSettings.Controller.DynamoViewModel.Log("Welcome to Dynamo!");
 
@@ -1492,7 +1447,6 @@ namespace Dynamo.Controls
             DynamoCommands.ShowSearch.Execute(null);
 
             _model.HomeSpace.OnDisplayed();
-
         }
 
         private bool CanDoPostUIActivation()
@@ -1541,9 +1495,7 @@ namespace Dynamo.Controls
                         else if (att.Name.Equals("Category"))
                             category = att.Value;
                         else if (att.Name.Equals("ID"))
-                        {
                             id = att.Value;
-                        }
                     }
                 }
 
@@ -1551,9 +1503,7 @@ namespace Dynamo.Controls
                 // a deterministic guid based on its name.  By doing it deterministically,
                 // files remain compatible
                 if (string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(funName))
-                {
                     id = GuidUtility.Create(GuidUtility.UrlNamespace, funName).ToString();
-                }
 
                 #endregion
 
@@ -1567,8 +1517,9 @@ namespace Dynamo.Controls
                 }
                 else if (Controller.CustomNodeLoader.Contains(funName))
                 {
-                    Log("ERROR: Could not load definition for \"" + funName +
-                              "\", a node with this name already exists.");
+                    Log(
+                        "ERROR: Could not load definition for \"" + funName +
+                        "\", a node with this name already exists.");
                     return false;
                 }
 
@@ -1580,7 +1531,9 @@ namespace Dynamo.Controls
                     category.Length > 0
                         ? category
                         : BuiltinNodeCategories.SCRIPTING_CUSTOMNODES,
-                    false, cx, cy
+                    false,
+                    cx,
+                    cy
                     );
 
                 dynWorkspaceModel ws = def.Workspace;
@@ -1602,7 +1555,7 @@ namespace Dynamo.Controls
                 //if there is any problem loading a node, then
                 //add the node's guid to the bad nodes collection
                 //so we can avoid attempting to make connections to it
-                List<Guid> badNodes = new List<Guid>();
+                var badNodes = new List<Guid>();
 
                 foreach (XmlNode elNode in elNodesList.ChildNodes)
                 {
@@ -1613,14 +1566,12 @@ namespace Dynamo.Controls
                     XmlAttribute yAttrib = elNode.Attributes[4];
 
                     XmlAttribute lacingAttrib = null;
-                    if(elNode.Attributes.Count > 5)
-                    {
-                         lacingAttrib = elNode.Attributes[5];
-                    }
+                    if (elNode.Attributes.Count > 5)
+                        lacingAttrib = elNode.Attributes[5];
 
                     string typeName = typeAttrib.Value;
 
-                    string oldNamespace = "Dynamo.Elements.";
+                    const string oldNamespace = "Dynamo.Elements.";
                     if (typeName.StartsWith(oldNamespace))
                         typeName = "Dynamo.Nodes." + typeName.Remove(0, oldNamespace.Length);
 
@@ -1630,9 +1581,7 @@ namespace Dynamo.Controls
                     //propagating bad GUIDs
                     var guid = new Guid(guidAttrib.Value);
                     if (guid == Guid.Empty)
-                    {
                         guid = Guid.NewGuid();
-                    }
 
                     string nickname = nicknameAttrib.Value;
 
@@ -1642,7 +1591,7 @@ namespace Dynamo.Controls
                     //Type t = Type.GetType(typeName);
                     TypeLoadData tData;
                     Type t;
-                    
+
                     if (!Controller.BuiltInTypesByName.TryGetValue(typeName, out tData))
                     {
                         //try and get a system type by this name
@@ -1652,24 +1601,32 @@ namespace Dynamo.Controls
                         if (t == null)
                         {
                             //try to get the also known as values
-                            foreach (KeyValuePair<string, TypeLoadData> kvp in Controller.BuiltInTypesByName)
+                            var query = from kvp in Controller.BuiltInTypesByName
+                                        let akaAttribs =
+                                            kvp.Value.Type.GetCustomAttributes(
+                                                typeof(AlsoKnownAsAttribute),
+                                                false)
+                                        where akaAttribs.Any()
+                                        where
+                                            (akaAttribs[0] as AlsoKnownAsAttribute).Values.Contains(
+                                                typeName)
+                                        select kvp;
+                            foreach (var kvp in query)
                             {
-                                var akaAttribs = kvp.Value.Type.GetCustomAttributes(typeof(AlsoKnownAsAttribute), false);
-                                if (akaAttribs.Count() > 0)
-                                {
-                                    if ((akaAttribs[0] as AlsoKnownAsAttribute).Values.Contains(typeName))
-                                    {
-                                        Log(string.Format("Found matching node for {0} also known as {1}", kvp.Key, typeName));
-                                        t = kvp.Value.Type;
-                                    }
-                                }
+                                Log(
+                                    string.Format(
+                                        "Found matching node for {0} also known as {1}",
+                                        kvp.Key,
+                                        typeName));
+                                t = kvp.Value.Type;
                             }
                         }
 
                         if (t == null)
                         {
                             Log("Could not load node of type: " + typeName);
-                            Log("Loading will continue but nodes might be missing from your workflow.");
+                            Log(
+                                "Loading will continue but nodes might be missing from your workflow.");
 
                             //return false;
                             badNodes.Add(guid);
@@ -1679,11 +1636,12 @@ namespace Dynamo.Controls
                     else
                         t = tData.Type;
 
-                    dynNodeModel el = CreateInstanceAndAddNodeToWorkspace(t, nickname, guid, x, y, ws);
+                    dynNodeModel el = CreateInstanceAndAddNodeToWorkspace(
+                        t, nickname, guid, x, y, ws);
 
                     if (lacingAttrib != null)
                     {
-                        LacingStrategy lacing = LacingStrategy.First;
+                        LacingStrategy lacing;
                         Enum.TryParse(lacingAttrib.Value, out lacing);
                         el.ArgumentLacing = lacing;
                     }
@@ -1708,12 +1666,16 @@ namespace Dynamo.Controls
                         }
                         catch
                         {
-                            funId = GuidUtility.Create(GuidUtility.UrlNamespace, nicknameAttrib.Value);
+                            funId = GuidUtility.Create(
+                                GuidUtility.UrlNamespace, nicknameAttrib.Value);
                             fun.Symbol = funId.ToString();
                         }
 
                         if (dynSettings.Controller.CustomNodeLoader.IsInitialized(funId))
-                            fun.Definition = dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
+                        {
+                            fun.Definition =
+                                dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
+                        }
                         else
                             dependencies.Push(funId);
                     }
@@ -1750,17 +1712,11 @@ namespace Dynamo.Controls
                     foreach (dynNodeModel e in ws.Nodes)
                     {
                         if (e.GUID == guidStart)
-                        {
                             start = e;
-                        }
                         else if (e.GUID == guidEnd)
-                        {
                             end = e;
-                        }
                         if (start != null && end != null)
-                        {
                             break;
-                        }
                     }
 
                     try
@@ -1768,9 +1724,12 @@ namespace Dynamo.Controls
                         if (start != null && end != null && start != end)
                         {
                             var newConnector = new dynConnectorModel(
-                                start, end,
-                                startIndex, endIndex,
-                                portType, false
+                                start,
+                                end,
+                                startIndex,
+                                endIndex,
+                                portType,
+                                false
                                 );
 
                             ws.Connectors.Add(newConnector);
@@ -1778,7 +1737,11 @@ namespace Dynamo.Controls
                     }
                     catch
                     {
-                        dynSettings.Controller.DynamoViewModel.Log(string.Format("ERROR : Could not create connector between {0} and {1}.", start.GUID, end.GUID));
+                        dynSettings.Controller.DynamoViewModel.Log(
+                            string.Format(
+                                "ERROR : Could not create connector between {0} and {1}.",
+                                start.GUID,
+                                end.GUID));
                     }
                 }
 
@@ -1798,11 +1761,13 @@ namespace Dynamo.Controls
                         double x = Convert.ToDouble(xAttrib.Value);
                         double y = Convert.ToDouble(yAttrib.Value);
 
-                        var paramDict = new Dictionary<string, object>();
-                        paramDict.Add("x", x);
-                        paramDict.Add("y", y);
-                        paramDict.Add("text", text);
-                        paramDict.Add("workspace", ws);
+                        var paramDict = new Dictionary<string, object>
+                        {
+                            { "x", x },
+                            { "y", y },
+                            { "text", text },
+                            { "workspace", ws }
+                        };
                         //DynamoCommands.AddNoteCmd.Execute(paramDict);
                         dynSettings.Controller.DynamoViewModel.AddNoteCommand.Execute(paramDict);
                     }
@@ -1841,7 +1806,6 @@ namespace Dynamo.Controls
 
                 Controller.PackageManagerClient.LoadPackageHeader(def, funName);
                 nodeWorkspaceWasLoaded(def, children, parents);
-
             }
             catch (Exception ex)
             {
@@ -1862,7 +1826,7 @@ namespace Dynamo.Controls
         /// <param name="path">The path to save to</param>
         internal void SaveAs(string path)
         {
-            this.SaveAs(path, _model.CurrentSpace);
+            SaveAs(path, _model.CurrentSpace);
         }
 
         /// <summary>
@@ -1878,24 +1842,18 @@ namespace Dynamo.Controls
                 // if it's a custom node
                 if (workspace is FuncWorkspace)
                 {
-                    var def = dynSettings.Controller.CustomNodeLoader.GetDefinitionFromWorkspace(workspace);
+                    FunctionDefinition def =
+                        dynSettings.Controller.CustomNodeLoader.GetDefinitionFromWorkspace(
+                            workspace);
                     def.Workspace.FilePath = path;
-                    if (def != null)
-                    {
-                        this.SaveFunction(def, true);
-                    }
+                    SaveFunction(def);
                     return;
                 }
 
                 if (!dynWorkspaceModel.SaveWorkspace(path, workspace))
-                {
                     Log("Workbench could not be saved.");
-                }
                 else
-                {
                     workspace.FilePath = path;
-                }
-                
             }
         }
 
@@ -1915,30 +1873,26 @@ namespace Dynamo.Controls
         /// <param name="selectedNodes"> The function definition for the user-defined node </param>
         private void RefactorCustomNode()
         {
-
             //Bench.workspaceLabel.Content = Bench.editNameBox.Text;
-            var def = Controller.CustomNodeLoader.GetDefinitionFromWorkspace(CurrentSpace);
+            FunctionDefinition def =
+                Controller.CustomNodeLoader.GetDefinitionFromWorkspace(CurrentSpace);
             Controller.SearchViewModel.Refactor(def, editName, (_model.CurrentSpace).Name);
 
             //Update existing function nodes
-            foreach (dynNodeModel el in AllNodes)
+            foreach (var node in AllNodes.OfType<dynFunction>())
             {
-                if (el is dynFunction)
+                if (node.Definition == null)
                 {
-                    var node = (dynFunction)el;
-
-                    if (node.Definition == null)
-                    {
-                        node.Definition = Controller.CustomNodeLoader.GetFunctionDefinition(Guid.Parse(node.Symbol));
-                    }
-
-                    if (!node.Definition.Workspace.Name.Equals(CurrentSpace.Name))
-                        continue;
-
-                    //Rename nickname only if it's still referring to the old name
-                    if (node.NickName.Equals(CurrentSpace.Name))
-                        node.NickName = editName;
+                    node.Definition =
+                        Controller.CustomNodeLoader.GetFunctionDefinition(Guid.Parse(node.Symbol));
                 }
+
+                if (!node.Definition.Workspace.Name.Equals(CurrentSpace.Name))
+                    continue;
+
+                //Rename nickname only if it's still referring to the old name
+                if (node.NickName.Equals(CurrentSpace.Name))
+                    node.NickName = editName;
             }
 
             Controller.FSchemeEnvironment.RemoveSymbol(CurrentSpace.Name);
@@ -1970,19 +1924,6 @@ namespace Dynamo.Controls
             return true;
         }
 
-        public IEnumerable<dynNodeModel> AllNodes
-        {
-            get
-            {
-                return _model.Workspaces.Aggregate((IEnumerable<dynNodeModel>)new List<dynNodeModel>(), (a, x) => a.Concat(x.Nodes))
-                    .Concat(Controller.CustomNodeLoader.GetLoadedDefinitions().Aggregate(
-                        (IEnumerable<dynNodeModel>)new List<dynNodeModel>(),
-                        (a, x) => a.Concat(x.Workspace.Nodes)
-                        )
-                    );
-            }
-        }
-
         /// <summary>
         ///     Save a function.  This includes writing to a file and compiling the 
         ///     function and saving it to the FSchemeEnvironment
@@ -1990,7 +1931,11 @@ namespace Dynamo.Controls
         /// <param name="definition">The definition to saveo</param>
         /// <param name="bool">Whether to write the function to file.</param>
         /// <returns>Whether the operation was successful</returns>
-        public void SaveFunction(FunctionDefinition definition, bool writeDefinition = true, bool addToSearch = false, bool compileFunction = true)
+        public void SaveFunction(
+            FunctionDefinition definition,
+            bool writeDefinition = true,
+            bool addToSearch = false,
+            bool compileFunction = true)
         {
             if (definition == null)
                 return;
@@ -2009,36 +1954,46 @@ namespace Dynamo.Controls
                     if (!Directory.Exists(pluginsPath))
                         Directory.CreateDirectory(pluginsPath);
 
-                    string path = Path.Combine(pluginsPath, dynSettings.FormatFileName(functionWorkspace.Name) + ".dyf");
+                    string path = Path.Combine(
+                        pluginsPath, dynSettings.FormatFileName(functionWorkspace.Name) + ".dyf");
                     dynWorkspaceModel.SaveWorkspace(path, functionWorkspace);
 
                     if (addToSearch)
                     {
-                        Controller.SearchViewModel.Add(functionWorkspace.Name, functionWorkspace.Category, definition.FunctionId);
+                        Controller.SearchViewModel.Add(
+                            functionWorkspace.Name,
+                            functionWorkspace.Category,
+                            definition.FunctionId);
                     }
 
-                    Controller.CustomNodeLoader.SetNodeInfo(functionWorkspace.Name, functionWorkspace.Category, definition.FunctionId, path);
+                    Controller.CustomNodeLoader.SetNodeInfo(
+                        functionWorkspace.Name,
+                        functionWorkspace.Category,
+                        definition.FunctionId,
+                        path);
 
                     #region Compile Function and update all nodes
 
                     IEnumerable<string> inputNames = new List<string>();
                     IEnumerable<string> outputNames = new List<string>();
-                    dynSettings.Controller.FSchemeEnvironment.DefineSymbol(definition.FunctionId.ToString(), CustomNodeLoader.CompileFunction(definition, ref inputNames, ref outputNames));
+                    dynSettings.Controller.FSchemeEnvironment.DefineSymbol(
+                        definition.FunctionId.ToString(),
+                        CustomNodeLoader.CompileFunction(
+                            definition,
+                            ref
+                                inputNames,
+                            ref
+                                outputNames));
 
                     //Update existing function nodes which point to this function to match its changes
-                    foreach (dynNodeModel el in AllNodes)
+                    foreach (
+                        dynFunction node in
+                            AllNodes.OfType<dynFunction>()
+                                    .Where(node => node.Definition == definition))
                     {
-                        if (el is dynFunction)
-                        {
-                            var node = (dynFunction)el;
-
-                            if (node.Definition != definition)
-                                continue;
-
-                            node.SetInputs(inputNames);
-                            node.SetOutputs(outputNames);
-                            el.RegisterAllPorts();
-                        }
+                        node.SetInputs(inputNames);
+                        node.SetOutputs(outputNames);
+                        node.RegisterAllPorts();
                     }
 
                     //Call OnSave for all saved elements
@@ -2046,8 +2001,6 @@ namespace Dynamo.Controls
                         el.onSave();
 
                     #endregion
-
-
                 }
                 catch (Exception e)
                 {
@@ -2055,7 +2008,6 @@ namespace Dynamo.Controls
                     Log(e);
                 }
             }
-
         }
 
         /// <summary>
@@ -2081,7 +2033,8 @@ namespace Dynamo.Controls
                 if (!Directory.Exists(pluginsPath))
                     Directory.CreateDirectory(pluginsPath);
 
-                string path = Path.Combine(pluginsPath, dynSettings.FormatFileName(functionWorkspace.Name) + ".dyf");
+                string path = Path.Combine(
+                    pluginsPath, dynSettings.FormatFileName(functionWorkspace.Name) + ".dyf");
                 dynWorkspaceModel.SaveWorkspace(path, functionWorkspace);
                 return path;
             }
@@ -2091,7 +2044,6 @@ namespace Dynamo.Controls
                 Log(e);
                 return "";
             }
-
         }
 
         private void nodeWorkspaceWasLoaded(
@@ -2127,13 +2079,20 @@ namespace Dynamo.Controls
         /// <param name="guid"> The unique identifier for the node in the workspace. </param>
         /// <param name="x"> The x coordinate where the dynNodeView will be placed </param>
         /// <param name="y"> The x coordinate where the dynNodeView will be placed</param>
+        /// <param name="ws"></param>
         /// <returns> The newly instantiate dynNode</returns>
-        public dynNodeModel CreateInstanceAndAddNodeToWorkspace(Type elementType, string nickName, Guid guid,
-            double x, double y, dynWorkspaceModel ws)    //Visibility vis = Visibility.Visible)
+        public dynNodeModel CreateInstanceAndAddNodeToWorkspace(
+            Type elementType,
+            string nickName,
+            Guid guid,
+            double x,
+            double y,
+            dynWorkspaceModel ws)
+            //Visibility vis = Visibility.Visible)
         {
             try
             {
-                var node = CreateNodeInstance(elementType, nickName, guid);
+                dynNodeModel node = CreateNodeInstance(elementType, nickName, guid);
 
                 ws.Nodes.Add(node);
                 node.WorkSpace = ws;
@@ -2163,17 +2122,14 @@ namespace Dynamo.Controls
             var node = (dynNodeModel)Activator.CreateInstance(elementType);
 
             if (!string.IsNullOrEmpty(nickName))
-            {
                 node.NickName = nickName;
-            }
             else
             {
                 var elNameAttrib =
-                    node.GetType().GetCustomAttributes(typeof(NodeNameAttribute), true)[0] as NodeNameAttribute;
+                    node.GetType().GetCustomAttributes(typeof(NodeNameAttribute), true)[0] as
+                    NodeNameAttribute;
                 if (elNameAttrib != null)
-                {
                     node.NickName = elNameAttrib.Name;
-                }
             }
 
             node.GUID = guid;
@@ -2199,17 +2155,15 @@ namespace Dynamo.Controls
         internal void ViewCustomNodeWorkspace(FunctionDefinition symbol)
         {
             if (symbol == null)
-            {
                 throw new Exception("There is a null function definition for this node.");
-            }
 
             if (_model.CurrentSpace.Name.Equals(symbol.Workspace.Name))
                 return;
 
             dynWorkspaceModel newWs = symbol.Workspace;
 
-            if ( !this._model.Workspaces.Contains(newWs) )
-                this._model.Workspaces.Add(newWs);
+            if (!_model.Workspaces.Contains(newWs))
+                _model.Workspaces.Add(newWs);
 
             CurrentSpaceViewModel.OnStopDragging(this, EventArgs.Empty);
 
@@ -2234,13 +2188,9 @@ namespace Dynamo.Controls
                     foreach (XmlAttribute att in node.Attributes)
                     {
                         if (att.Name.Equals("X"))
-                        {
                             _model.CurrentSpace.X = Convert.ToDouble(att.Value);
-                        }
                         else if (att.Name.Equals("Y"))
-                        {
                             _model.CurrentSpace.Y = Convert.ToDouble(att.Value);
-                        }
                     }
                 }
 
@@ -2255,7 +2205,7 @@ namespace Dynamo.Controls
                 //if there is any problem loading a node, then
                 //add the node's guid to the bad nodes collection
                 //so we can avoid attempting to make connections to it
-                List<Guid> badNodes = new List<Guid>();
+                var badNodes = new List<Guid>();
 
                 foreach (XmlNode elNode in elNodesList.ChildNodes)
                 {
@@ -2267,9 +2217,7 @@ namespace Dynamo.Controls
 
                     XmlAttribute lacingAttrib = null;
                     if (elNode.Attributes.Count > 5)
-                    {
                         lacingAttrib = elNode.Attributes[5];
-                    }
 
                     string typeName = typeAttrib.Value;
 
@@ -2279,9 +2227,7 @@ namespace Dynamo.Controls
                     //propagating bad GUIDs
                     var guid = new Guid(guidAttrib.Value);
                     if (guid == Guid.Empty)
-                    {
                         guid = Guid.NewGuid();
-                    }
 
                     string nickname = nicknameAttrib.Value;
 
@@ -2300,17 +2246,26 @@ namespace Dynamo.Controls
                         t = Type.GetType(typeName);
 
                         //if we still can't find the type, try the also known as attributes
-                        if(t == null)
+                        if (t == null)
                         {
                             //try to get the also known as values
-                            foreach (KeyValuePair<string, TypeLoadData> kvp in Controller.BuiltInTypesByName)
+                            foreach (var kvp in Controller.BuiltInTypesByName)
                             {
-                                var akaAttribs = kvp.Value.Type.GetCustomAttributes(typeof(AlsoKnownAsAttribute), false);
-                                if (akaAttribs.Count() > 0)
+                                object[] akaAttribs =
+                                    kvp.Value.Type.GetCustomAttributes(
+                                        typeof(AlsoKnownAsAttribute),
+                                        false);
+                                if (akaAttribs.Any())
                                 {
-                                    if ((akaAttribs[0] as AlsoKnownAsAttribute).Values.Contains(typeName))
+                                    if (
+                                        (akaAttribs[0] as AlsoKnownAsAttribute).Values.Contains(
+                                            typeName))
                                     {
-                                        Log(string.Format("Found matching node for {0} also known as {1}", kvp.Key , typeName));
+                                        Log(
+                                            string.Format(
+                                                "Found matching node for {0} also known as {1}",
+                                                kvp.Key,
+                                                typeName));
                                         t = kvp.Value.Type;
                                     }
                                 }
@@ -2320,7 +2275,8 @@ namespace Dynamo.Controls
                         if (t == null)
                         {
                             Log("Could not load node of type: " + typeName);
-                            Log("Loading will continue but nodes might be missing from your workflow.");
+                            Log(
+                                "Loading will continue but nodes might be missing from your workflow.");
 
                             //return false;
                             badNodes.Add(guid);
@@ -2331,13 +2287,11 @@ namespace Dynamo.Controls
                         t = tData.Type;
 
                     dynNodeModel el = CreateInstanceAndAddNodeToWorkspace(
-                        t, nickname, guid, x, y,
-                        _model.CurrentSpace
-                        );
+                        t, nickname, guid, x, y, _model.CurrentSpace);
 
                     if (lacingAttrib != null)
                     {
-                        LacingStrategy lacing = LacingStrategy.Disabled;
+                        var lacing = LacingStrategy.Disabled;
                         Enum.TryParse(lacingAttrib.Value, out lacing);
                         el.ArgumentLacing = lacing;
                     }
@@ -2368,12 +2322,13 @@ namespace Dynamo.Controls
                         }
                         catch
                         {
-                            funId = GuidUtility.Create(GuidUtility.UrlNamespace, nicknameAttrib.Value);
+                            funId = GuidUtility.Create(
+                                GuidUtility.UrlNamespace, nicknameAttrib.Value);
                             fun.Symbol = funId.ToString();
                         }
 
-                        fun.Definition = dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
-
+                        fun.Definition =
+                            dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
                     }
                 }
 
@@ -2403,23 +2358,21 @@ namespace Dynamo.Controls
                     foreach (dynNodeModel e in _model.Nodes)
                     {
                         if (e.GUID == guidStart)
-                        {
                             start = e;
-                        }
                         else if (e.GUID == guidEnd)
-                        {
                             end = e;
-                        }
                         if (start != null && end != null)
-                        {
                             break;
-                        }
                     }
 
                     if (start != null && end != null && start != end)
                     {
-                        var newConnector = new dynConnectorModel(start, end,
-                                                            startIndex, endIndex, portType);
+                        var newConnector = new dynConnectorModel(
+                            start,
+                            end,
+                            startIndex,
+                            endIndex,
+                            portType);
 
                         _model.CurrentSpace.Connectors.Add(newConnector);
                     }
@@ -2442,11 +2395,13 @@ namespace Dynamo.Controls
                         //dynNoteView n = Bench.AddNote(text, x, y, this.CurrentSpace);
                         //Bench.AddNote(text, x, y, this.CurrentSpace);
 
-                        var paramDict = new Dictionary<string, object>();
-                        paramDict.Add("x", x);
-                        paramDict.Add("y", y);
-                        paramDict.Add("text", text);
-                        paramDict.Add("workspace", _model.CurrentSpace);
+                        var paramDict = new Dictionary<string, object>
+                        {
+                            { "x", x },
+                            { "y", y },
+                            { "text", text },
+                            { "workspace", _model.CurrentSpace }
+                        };
                         AddNoteCommand.Execute(paramDict);
                     }
                 }
@@ -2485,9 +2440,7 @@ namespace Dynamo.Controls
                 {
                     el.Destroy();
                 }
-                catch
-                {
-                }
+                catch { }
             }
 
             foreach (dynNodeModel el in elements)
@@ -2510,12 +2463,13 @@ namespace Dynamo.Controls
             _model.CurrentSpace.Modified();
         }
 
-        internal FunctionDefinition NewFunction(Guid id,
-                                                string name,
-                                                string category,
-                                                bool display,
-                                                double workspaceOffsetX = DynamoView.CANVAS_OFFSET_X,
-                                                double workspaceOffsetY = DynamoView.CANVAS_OFFSET_Y)
+        internal FunctionDefinition NewFunction(
+            Guid id,
+            string name,
+            string category,
+            bool display,
+            double workspaceOffsetX = DynamoView.CANVAS_OFFSET_X,
+            double workspaceOffsetY = DynamoView.CANVAS_OFFSET_Y)
         {
             //Add an entry to the funcdict
             var workSpace = new FuncWorkspace(
@@ -2523,15 +2477,13 @@ namespace Dynamo.Controls
 
             _model.Workspaces.Add(workSpace);
 
-            List<dynNodeModel> newElements = workSpace.Nodes.ToList();
-            List<dynConnectorModel> newConnectors = workSpace.Connectors.ToList();
-
             var functionDefinition = new FunctionDefinition(id)
             {
                 Workspace = workSpace
             };
 
-            Controller.CustomNodeLoader.AddFunctionDefinition(functionDefinition.FunctionId, functionDefinition);
+            Controller.CustomNodeLoader.AddFunctionDefinition(
+                functionDefinition.FunctionId, functionDefinition);
 
             // add the element to search
             Controller.SearchViewModel.Add(name, category, id);
@@ -2540,7 +2492,8 @@ namespace Dynamo.Controls
             {
                 if (!ViewingHomespace)
                 {
-                    var def = Controller.CustomNodeLoader.GetDefinitionFromWorkspace(CurrentSpace);
+                    FunctionDefinition def =
+                        Controller.CustomNodeLoader.GetDefinitionFromWorkspace(CurrentSpace);
                     if (def != null)
                         SaveFunction(def);
                 }
@@ -2551,8 +2504,10 @@ namespace Dynamo.Controls
             return functionDefinition;
         }
 
-        protected virtual dynFunction CreateFunction(IEnumerable<string> inputs, IEnumerable<string> outputs,
-                                                     FunctionDefinition functionDefinition)
+        protected virtual dynFunction CreateFunction(
+            IEnumerable<string> inputs,
+            IEnumerable<string> outputs,
+            FunctionDefinition functionDefinition)
         {
             return new dynFunction(inputs, outputs, functionDefinition);
         }
@@ -2565,7 +2520,8 @@ namespace Dynamo.Controls
             {
                 TypeLoadData tld = Controller.BuiltInTypesByName[name];
 
-                ObjectHandle obj = Activator.CreateInstanceFrom(tld.Assembly.Location, tld.Type.FullName);
+                ObjectHandle obj = Activator.CreateInstanceFrom(
+                    tld.Assembly.Location, tld.Type.FullName);
                 var newEl = (dynNodeModel)obj.Unwrap();
                 newEl.DisableInteraction();
                 result = newEl;
@@ -2575,8 +2531,8 @@ namespace Dynamo.Controls
                 TypeLoadData tld = Controller.BuiltInTypesByNickname[name];
                 try
                 {
-
-                    ObjectHandle obj = Activator.CreateInstanceFrom(tld.Assembly.Location, tld.Type.FullName);
+                    ObjectHandle obj = Activator.CreateInstanceFrom(
+                        tld.Assembly.Location, tld.Type.FullName);
                     var newEl = (dynNodeModel)obj.Unwrap();
                     newEl.DisableInteraction();
                     result = newEl;
@@ -2592,10 +2548,9 @@ namespace Dynamo.Controls
             {
                 dynFunction func;
 
-                if (Controller.CustomNodeLoader.GetNodeInstance(Controller, Guid.Parse(name), out func))
-                {
+                if (Controller.CustomNodeLoader.GetNodeInstance(
+                    Controller, Guid.Parse(name), out func))
                     result = func;
-                }
                 else
                 {
                     Log("Failed to find FunctionDefinition.");
@@ -2629,7 +2584,9 @@ namespace Dynamo.Controls
                 }
                 else
                 {
-                    foreach (FunctionDefinition funcDef in Controller.CustomNodeLoader.GetLoadedDefinitions())
+                    foreach (
+                        FunctionDefinition funcDef in
+                            Controller.CustomNodeLoader.GetLoadedDefinitions())
                     {
                         if (funcDef.Workspace.Nodes.Contains(e))
                         {
@@ -2640,8 +2597,11 @@ namespace Dynamo.Controls
                 }
             }
 
-            dynSettings.Controller.DynamoViewModel.CurrentSpaceViewModel.OnRequestCenterViewOnElement(this, new NodeEventArgs(e,null));
-            
+            dynSettings.Controller.DynamoViewModel.CurrentSpaceViewModel
+                       .OnRequestCenterViewOnElement(
+                           this,
+                           new NodeEventArgs(
+                               e, null));
         }
     }
 
@@ -2657,35 +2617,35 @@ namespace Dynamo.Controls
         }
     }
 
-    public class PointEventArgs:EventArgs
+    public class PointEventArgs : EventArgs
     {
-        public Point Point { get; set; }
-
         public PointEventArgs(Point p)
         {
             Point = p;
         }
+
+        public Point Point { get; set; }
     }
 
     public class NodeEventArgs : EventArgs
     {
-        public dynNodeModel Node { get; set; }
-        public Dictionary<string, object> Data { get; set; } 
-        public NodeEventArgs(dynNodeModel n, Dictionary<string, object> d )
+        public NodeEventArgs(dynNodeModel n, Dictionary<string, object> d)
         {
             Node = n;
             Data = d;
         }
+
+        public dynNodeModel Node { get; set; }
+        public Dictionary<string, object> Data { get; set; }
     }
 
     public class ViewEventArgs : EventArgs
     {
-        public System.Windows.Controls.UserControl View { get; set; }
-
-        public ViewEventArgs(System.Windows.Controls.UserControl v)
+        public ViewEventArgs(UserControl v)
         {
             View = v;
         }
-    }
 
+        public UserControl View { get; set; }
+    }
 }

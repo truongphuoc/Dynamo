@@ -459,8 +459,8 @@ namespace Dynamo.Revit
                        runCount = 0;
 
                        var query = controller.DynamoViewModel.Model.HomeSpace.Nodes
-                           .Where(x => x is dynFunctionWithRevit)
-                           .Select(x => (x as dynFunctionWithRevit).ElementsContainer)
+                           .OfType<dynFunctionWithRevit>()
+                           .Select(x => x.ElementsContainer)
                            .Where(c => c.HasElements(this))
                            .SelectMany(c => c[this]);
 

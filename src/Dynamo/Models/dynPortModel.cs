@@ -164,7 +164,7 @@ namespace Dynamo.Connectors
             }
 
             if (connectors.Count == 0)
-                Owner.State = ElementState.DEAD;
+                Owner.State = ElementState.Dead;
 
         }
 

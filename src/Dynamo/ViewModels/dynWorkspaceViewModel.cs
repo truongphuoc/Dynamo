@@ -503,16 +503,14 @@ namespace Dynamo
             _model.Y = p.Y;
         }
 
-        private bool CanSetCurrentOffset(object parameter)
+        private static bool CanSetCurrentOffset(object parameter)
         {
             return true;
         }
 
         private void CreateNodeFromSelection()
         {
-            CollapseNodes(
-                DynamoSelection.Instance.Selection.Where(x => x is dynNodeModel)
-                    .Select(x => (x as dynNodeModel)));
+            CollapseNodes(DynamoSelection.Instance.Selection.OfType<dynNodeModel>());
         }
 
         private void NodeFromSelectionCanExecuteChanged(object sender, NotifyCollectionChangedEventArgs e)
@@ -522,11 +520,7 @@ namespace Dynamo
 
         private bool CanCreateNodeFromSelection()
         {
-            if (DynamoSelection.Instance.Selection.Count(x => x is dynNodeModel) > 1)
-            {
-                return true;
-            }
-            return false;
+            return DynamoSelection.Instance.Selection.Count(x => x is dynNodeModel) > 1;
         }
 
         /// <summary>
@@ -538,7 +532,7 @@ namespace Dynamo
         /// <param name="selectedNodes"> The function definition for the user-defined node </param>
         internal void CollapseNodes(IEnumerable<dynNodeModel> selectedNodes)
         {
-            Dynamo.Utilities.NodeCollapser.Collapse(selectedNodes, dynSettings.Controller.DynamoViewModel.CurrentSpace);
+            NodeCollapser.Collapse(selectedNodes, dynSettings.Controller.DynamoViewModel.CurrentSpace);
         }
     }
 

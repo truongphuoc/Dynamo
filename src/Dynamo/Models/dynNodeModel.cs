@@ -1,25 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Diagnostics;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Linq;
+using System.Xml;
+using Dynamo.Commands;
+using Dynamo.Connectors;
+using Dynamo.Controls;
+using Dynamo.FSchemeInterop;
+using Dynamo.FSchemeInterop.Node;
 using Dynamo.Nodes.TypeSystem;
 using Dynamo.Selection;
-using Microsoft.FSharp.Collections;
-
-using Dynamo.Controls;
 using Dynamo.Utilities;
-using Dynamo.Connectors;
-using Dynamo.FSchemeInterop.Node;
-using Dynamo.FSchemeInterop;
-using Dynamo.Commands;
-using Value = Dynamo.FScheme.Value;
+using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
-
 
 namespace Dynamo.Nodes
 {
-    public enum ElementState { DEAD, ACTIVE, ERROR };
+    public enum ElementState
+    {
+        Dead,
+        Active,
+        Error
+    };
 
     public enum LacingStrategy
     {
@@ -36,10 +39,6 @@ namespace Dynamo.Nodes
 
     public abstract class dynNodeModel : dynModelBase
     {
-        /* TODO:
-         * Incorporate INode in here somewhere
-         */
-
         #region Abstract Members
 
         /// <summary>
@@ -47,7 +46,7 @@ namespace Dynamo.Nodes
         /// </summary>
         /// <param name="args">Arguments to the node. You are guaranteed to have as many arguments as you have InPorts at the time it is run.</param>
         /// <returns>An expression that is the result of the Node's evaluation. It will be passed along to whatever the OutPort is connected to.</returns>
-        public virtual void Evaluate(FSharpList<Value> args, Dictionary<PortData, Value> outPuts)
+        public virtual void Evaluate(FSharpList<FScheme.Value> args, Dictionary<PortData, FScheme.Value> outPuts)
         {
             throw new NotImplementedException();
         }
@@ -56,75 +55,72 @@ namespace Dynamo.Nodes
 
         #region Properties
 
-        public event DispatchedToUIThreadHandler DispatchedToUI;
-        public void OnDispatchedToUI(object sender, UIDispatcherEventArgs e)
-        {
-            if (DispatchedToUI != null)
-                DispatchedToUI(this, e);
-        }
+        private readonly Dictionary<dynPortModel, PortData> _portDataDict = new Dictionary<dynPortModel, PortData>();
 
-        public dynWorkspaceModel WorkSpace;
-        public ObservableCollection<PortData> InPortData { get; private set; }
-        public ObservableCollection<PortData> OutPortData { get; private set; }
-        Dictionary<dynPortModel, PortData> portDataDict = new Dictionary<dynPortModel, PortData>();
-        
 //MVVM : node should not reference its view directly
         //public dynNodeView NodeUI;
-        
-        public Dictionary<int, Tuple<int, dynNodeModel>> Inputs = 
+
+        private readonly Dictionary<int, Tuple<int, dynNodeModel>> _previousInputPortMappings =
             new Dictionary<int, Tuple<int, dynNodeModel>>();
+
+        private readonly Dictionary<int, HashSet<Tuple<int, dynNodeModel>>> _previousOutputPortMappings =
+            new Dictionary<int, HashSet<Tuple<int, dynNodeModel>>>();
+
+        public Dictionary<int, Tuple<int, dynNodeModel>> Inputs =
+            new Dictionary<int, Tuple<int, dynNodeModel>>();
+
         public Dictionary<int, HashSet<Tuple<int, dynNodeModel>>> Outputs =
             new Dictionary<int, HashSet<Tuple<int, dynNodeModel>>>();
 
-        private Dictionary<int, Tuple<int, dynNodeModel>> previousInputPortMappings = 
-            new Dictionary<int, Tuple<int, dynNodeModel>>();
-        private Dictionary<int, HashSet<Tuple<int, dynNodeModel>>> previousOutputPortMappings =
-            new Dictionary<int, HashSet<Tuple<int, dynNodeModel>>>();
-        ObservableCollection<dynPortModel> inPorts = new ObservableCollection<dynPortModel>();
-        ObservableCollection<dynPortModel> outPorts = new ObservableCollection<dynPortModel>();
-        private LacingStrategy _argumentLacing  = LacingStrategy.First;
+        public dynWorkspaceModel WorkSpace;
+
+        private LacingStrategy _argumentLacing = LacingStrategy.First;
+        private bool _isDirty = true;
         private string _nickName;
-        ElementState state;
-        string toolTipText = "";
+
+        /// <summary>
+        /// Should changes be reported to the containing workspace?
+        /// </summary>
+        private bool _report = true;
+
+        private bool _saveResult;
+        private ObservableCollection<dynPortModel> _inPorts = new ObservableCollection<dynPortModel>();
+        private bool _interactionEnabled = true;
+        private ObservableCollection<dynPortModel> _outPorts = new ObservableCollection<dynPortModel>();
+
+        private ElementState _state;
+        private string _toolTipText = "";
+        public ObservableCollection<PortData> InPortData { get; private set; }
+        public ObservableCollection<PortData> OutPortData { get; private set; }
         //bool isSelected = false;
-        private bool _isCustomFunction = false;
-        private bool interactionEnabled = true;
 
         /// <summary>
         /// Returns whether this node represents a built-in or custom function.
         /// </summary>
         public bool IsCustomFunction
         {
-            get { return this.GetType().IsAssignableFrom(typeof(dynFunction)); }
+            get { return GetType().IsAssignableFrom(typeof(dynFunction)); }
         }
 
         public ElementState State
         {
-            get
-            {
-                return state;
-            }
+            get { return _state; }
             set
             {
-                if (value != ElementState.ERROR)
-                {
+                if (value != ElementState.Error)
                     SetTooltip();
-                }
 
-                state = value;
+                _state = value;
                 RaisePropertyChanged("State");
             }
         }
 
         public string ToolTipText
         {
-            get
-            {
-                return toolTipText;
-            }
+            get { return _toolTipText; }
             set
             {
-                toolTipText = value;
+                _toolTipText = value;
                 RaisePropertyChanged("ToolTipText");
             }
         }
@@ -141,20 +137,20 @@ namespace Dynamo.Nodes
 
         public ObservableCollection<dynPortModel> InPorts
         {
-            get { return inPorts; }
+            get { return _inPorts; }
             set
             {
-                inPorts = value;
+                _inPorts = value;
                 RaisePropertyChanged("InPorts");
             }
         }
 
         public ObservableCollection<dynPortModel> OutPorts
         {
-            get { return outPorts; }
+            get { return _outPorts; }
             set
             {
-                outPorts = value;
+                _outPorts = value;
                 RaisePropertyChanged("OutPorts");
             }
         }
@@ -179,34 +175,28 @@ namespace Dynamo.Nodes
         /// <value>
         ///     If the node has a category, return it.  Other wise return empty string.
         /// </value>
-        public string Category { 
+        public string Category
+        {
             get
             {
-                var type = GetType();
+                Type type = GetType();
                 object[] attribs = type.GetCustomAttributes(typeof(NodeCategoryAttribute), false);
                 if (type.Namespace == "Dynamo.Nodes" &&
                     !type.IsAbstract &&
                     attribs.Length > 0 &&
-                    type.IsSubclassOf(typeof (dynNodeModel)))
+                    type.IsSubclassOf(typeof(dynNodeModel)))
                 {
-                    NodeCategoryAttribute elCatAttrib = attribs[0] as NodeCategoryAttribute;
+                    var elCatAttrib = attribs[0] as NodeCategoryAttribute;
                     return elCatAttrib.ElementCategory;
-                }                    
+                }
                 return "";
             }
         }
 
         /// <summary>
-        /// Should changes be reported to the containing workspace?
-        /// </summary>
-        private bool _report = true;
-
-        /// <summary>
         /// Get the last computed value from the node.
         /// </summary>
-        public Value OldValue { get; protected set; }
-
-        protected internal ExecutionEnvironment macroEnvironment = null;
+        public FScheme.Value OldValue { get; protected set; }
 
         //TODO: don't make this static (maybe)
         protected DynamoView Bench
@@ -219,8 +209,6 @@ namespace Dynamo.Nodes
             get { return dynSettings.Controller; }
         }
 
-        private bool _isDirty = true;
-
         ///<summary>
         ///Does this Element need to be regenerated? Setting this to true will trigger a modification event
         ///for the dynWorkspace containing it. If Automatic Running is enabled, setting this to true will
@@ -231,15 +219,8 @@ namespace Dynamo.Nodes
             get
             {
                 //TODO: When marked as clean, remember so we don't have to re-traverse
-                if (_isDirty)
-                    return true;
-                else
-                {
-                    bool dirty = Inputs.Values.Where(x => x != null).Any(x => x.Item2.RequiresRecalc);
-                    _isDirty = dirty;
-
-                    return dirty;
-                }
+                return _isDirty 
+                    || (_isDirty = Inputs.Values.Where(x => x != null).Any(x => x.Item2.RequiresRecalc));
             }
             set
             {
@@ -258,7 +239,6 @@ namespace Dynamo.Nodes
             set { RequiresRecalc = value; }
         }
 
-        private bool _saveResult = false;
         /// <summary>
         /// Determines whether or not the output of this Element will be saved. If true, Evaluate() will not be called
         /// unless IsDirty is true. Otherwise, Evaluate will be called regardless of the IsDirty value.
@@ -268,12 +248,9 @@ namespace Dynamo.Nodes
             get
             {
                 return _saveResult
-                   && Enumerable.Range(0, InPortData.Count).All(HasInput);
+                       && Enumerable.Range(0, InPortData.Count).All(HasInput);
             }
-            set
-            {
-                _saveResult = value;
-            }
+            set { _saveResult = value; }
         }
 
         /// <summary>
@@ -284,7 +261,7 @@ namespace Dynamo.Nodes
             get
             {
                 return OutPorts == null
-                    || OutPorts.All(x => !x.Connectors.Any());
+                       || OutPorts.All(x => !x.Connectors.Any());
             }
         }
 
@@ -295,11 +272,7 @@ namespace Dynamo.Nodes
                 Type t = GetType();
                 object[] rtAttribs = t.GetCustomAttributes(typeof(NodeSearchTagsAttribute), true);
 
-                if (rtAttribs.Length > 0)
-                    return ((NodeSearchTagsAttribute)rtAttribs[0]).Tags;
-                else
-                    return new List<string>();
-
+                return rtAttribs.Length > 0 ? ((NodeSearchTagsAttribute)rtAttribs[0]).Tags : new List<string>();
             }
         }
 
@@ -315,15 +288,29 @@ namespace Dynamo.Nodes
 
         public bool InteractionEnabled
         {
-            get { return interactionEnabled; }
-            set 
-            { 
-                interactionEnabled = value;
+            get { return _interactionEnabled; }
+            set
+            {
+                _interactionEnabled = value;
                 RaisePropertyChanged("InteractionEnabled");
             }
         }
 
+        public event DispatchedToUIThreadHandler DispatchedToUI;
+
+        public void OnDispatchedToUI(object sender, UIDispatcherEventArgs e)
+        {
+            if (DispatchedToUI != null)
+                DispatchedToUI(this, e);
+        }
+
         #endregion
+
+        /* TODO:
+         * Incorporate INode in here somewhere
+         */
+
+        private readonly Dictionary<PortData, FScheme.Value> _evaluationDict = new Dictionary<PortData, FScheme.Value>();
 
         public dynNodeModel()
         {
@@ -331,52 +318,55 @@ namespace Dynamo.Nodes
             OutPortData = new ObservableCollection<PortData>();
 
             //Fetch the element name from the custom attribute.
-            var nameArray = GetType().GetCustomAttributes(typeof(NodeNameAttribute), true);
+            object[] nameArray = GetType().GetCustomAttributes(typeof(NodeNameAttribute), true);
 
             if (nameArray.Length > 0)
             {
                 var elNameAttrib = nameArray[0] as NodeNameAttribute;
                 if (elNameAttrib != null)
-                {
                     NickName = elNameAttrib.Name;
-                }
             }
             else
                 NickName = "";
 
-            this.IsSelected = false;
-            State = ElementState.DEAD;
+            IsSelected = false;
+            State = ElementState.Dead;
             ArgumentLacing = LacingStrategy.First;
+        }
+
+        protected internal bool ReportingEnabled
+        {
+            get { return _report; }
         }
 
         /// <summary>
         /// Check current ports against ports used for previous mappings.
         /// </summary>
-        void CheckPortsForRecalc()
+        private void CheckPortsForRecalc()
         {
             RequiresRecalc = Enumerable.Range(0, InPortData.Count).Any(
-               delegate(int input)
-               {
-                   Tuple<int, dynNodeModel> oldInput;
-                   Tuple<int, dynNodeModel> currentInput;
+                delegate(int input)
+                    {
+                        Tuple<int, dynNodeModel> oldInput;
+                        Tuple<int, dynNodeModel> currentInput;
 
-                   //this is dirty if there wasn't anything set last time (implying it was never run)...
-                   return !previousInputPortMappings.TryGetValue(input, out oldInput)
-                       || oldInput == null
-                       || !TryGetInput(input, out currentInput)
-                       //or If what's set doesn't match
-                       || (oldInput.Item2 != currentInput.Item2 && oldInput.Item1 != currentInput.Item1);
-               })
-            || Enumerable.Range(0, OutPortData.Count).Any(
-               delegate(int output)
-               {
-                   HashSet<Tuple<int, dynNodeModel>> oldOutputs;
-                   HashSet<Tuple<int, dynNodeModel>> newOutputs;
+                        //this is dirty if there wasn't anything set last time (implying it was never run)...
+                        return !_previousInputPortMappings.TryGetValue(input, out oldInput)
+                               || oldInput == null
+                               || !TryGetInput(input, out currentInput)
+                               //or If what's set doesn't match
+                               || (oldInput.Item2 != currentInput.Item2 && oldInput.Item1 != currentInput.Item1);
+                    })
+                             || Enumerable.Range(0, OutPortData.Count).Any(
+                                 delegate(int output)
+                                     {
+                                         HashSet<Tuple<int, dynNodeModel>> oldOutputs;
+                                         HashSet<Tuple<int, dynNodeModel>> newOutputs;
 
-                   return !previousOutputPortMappings.TryGetValue(output, out oldOutputs)
-                       || !TryGetOutput(output, out newOutputs)
-                       || oldOutputs.SetEquals(newOutputs);
-               });
+                                         return !_previousOutputPortMappings.TryGetValue(output, out oldOutputs)
+                                                || !TryGetOutput(output, out newOutputs)
+                                                || oldOutputs.SetEquals(newOutputs);
+                                     });
         }
 
         /// <summary>
@@ -385,9 +375,8 @@ namespace Dynamo.Nodes
         /// </summary>
         /// <param name="xmlDoc">The XmlDocument representing the whole workspace containing this Element.</param>
         /// <param name="dynEl">The XmlElement representing this Element.</param>
-        public virtual void SaveElement(System.Xml.XmlDocument xmlDoc, System.Xml.XmlElement dynEl)
+        public virtual void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
         {
-
         }
 
         /// <summary>
@@ -395,9 +384,8 @@ namespace Dynamo.Nodes
         /// SaveElement() in order to write the data when saved.
         /// </summary>
         /// <param name="elNode">The XmlNode representing this Element.</param>
-        public virtual void LoadElement(System.Xml.XmlNode elNode)
+        public virtual void LoadElement(XmlNode elNode)
         {
-
         }
 
         /// <summary>
@@ -410,9 +398,7 @@ namespace Dynamo.Nodes
             {
                 input.Item2.MarkDirty();
                 if (input.Item2.RequiresRecalc)
-                {
                     dirty = true;
-                }
             }
             if (!_isDirty)
                 _isDirty = dirty;
@@ -428,63 +414,69 @@ namespace Dynamo.Nodes
             return OutPortData[port].PortType;
         }
 
-        internal virtual IDynamoType TypeCheck(int port, FSharpMap<string, TypeScheme> env)
+        internal virtual IDynamoType TypeCheck(int port, FSharpMap<dynSymbol, TypeScheme> env, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
         {
             if (Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
-                var result = TypeVar.Create();
-                var success = new FunctionType(
-                    InPortData.Select(x => x.PortType), 
-                    OutPortData[port].PortType).Unify(
-                        new FunctionType(
-                            Enumerable.Range(0, InPortData.Count).Select(
-                                x =>
-                                {
-                                    var input = Inputs[x];
-                                    return input.Item2.TypeCheck(input.Item1, env);
-                                }),
-                            result));
+                IDynamoType t1 = TypeScheme.Generalize(
+                    env,
+                    new FunctionType(
+                        Enumerable.Range(0, InPortData.Count).Select(GetInputType),
+                        GetOutputType(port)))
+                                           .Instantiate();
+
+                var t = new GuessType();
+
+                bool success = t1.Unify(
+                    new FunctionType(
+                        Enumerable.Range(0, InPortData.Count).Select(
+                            x =>
+                            {
+                                Tuple<int, dynNodeModel> input = Inputs[x];
+                                return input.Item2.TypeCheck(input.Item1, env, typeDict);
+                            }),
+                        t));
                 if (success)
                 {
-                    return result;
+                    return t;
                 }
                 throw new Exception("Type check failed.");
             }
 
             var inputs = new List<IDynamoType>();
 
-            foreach (var inData in InPortData.Select((x, i) => new { Data = x, Index = i }))
+            foreach (int inDataIdx in InPortData.Select((_, i) => i))
             {
                 Tuple<int, dynNodeModel> input;
-                if (TryGetInput(inData.Index, out input))
+                if (TryGetInput(inDataIdx, out input))
                 {
-                    if (input.Item2.TypeCheck(input.Item1, env).Unify(inData.Data.PortType))
-                    {
+                    if (input.Item2.TypeCheck(input.Item1, env, typeDict).Unify(GetInputType(inDataIdx)))
                         continue;
-                    }
                     throw new Exception("Type check failed.");
                 }
-                inputs.Add(inData.Data.PortType);
+                inputs.Add(GetInputType(inDataIdx));
             }
 
             return new FunctionType(inputs, OutPortData[port].PortType);
         }
 
-        internal virtual INode BuildExpression(Dictionary<dynNodeModel, Dictionary<int, INode>> buildDict)
+        internal virtual INode BuildExpression(Dictionary<dynNodeModel, Dictionary<int, INode>> buildDict, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
         {
             //Debug.WriteLine("Building expression...");
 
             if (OutPortData.Count > 1)
             {
-                var names = OutPortData.Select(x => x.NickName).Zip(Enumerable.Range(0, OutPortData.Count), (x, i) => x+i);
+                IEnumerable<string> names =
+                    OutPortData.Select(x => x.NickName).Zip(Enumerable.Range(0, OutPortData.Count), (x, i) => x + i);
                 var listNode = new FunctionNode("list", names);
-                foreach (var data in names.Zip(Enumerable.Range(0, OutPortData.Count), (name, index) => new { Name=name, Index=index }))
-                {
-                    listNode.ConnectInput(data.Name, Build(buildDict, data.Index));
-                }
+                foreach (
+                    var data in
+                        names.Zip(Enumerable.Range(0, OutPortData.Count),
+                                  (name, index) => new { Name = name, Index = index }))
+                    listNode.ConnectInput(data.Name, Build(buildDict, data.Index, typeDict));
                 return listNode;
             }
-            return Build(buildDict, 0);
+            return Build(buildDict, 0, typeDict);
         }
 
         //TODO: do all of this as the Ui is modified, simply return this?
@@ -493,7 +485,7 @@ namespace Dynamo.Nodes
         /// execution.
         /// </summary>
         /// <returns>The INode representation of this Element.</returns>
-        protected internal virtual INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort)
+        protected internal virtual INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
         {
             //Debug.WriteLine("Building node...");
 
@@ -502,19 +494,23 @@ namespace Dynamo.Nodes
                 return result[outPort];
 
             //Fetch the names of input ports.
-            var portNames = InPortData.Zip(Enumerable.Range(0, InPortData.Count), (x, i) => x.NickName + i);
+            IEnumerable<string> portNames = InPortData.Zip(Enumerable.Range(0, InPortData.Count),
+                                                           (x, i) => x.NickName + i);
 
             //Compile the procedure for this node.
             InputNode node = Compile(portNames);
 
             //Is this a partial application?
-            var partial = false;
+            bool partial = false;
 
             var partialSymList = new List<string>();
 
             //For each index in InPortData
             //for (int i = 0; i < InPortData.Count; i++)
-            foreach (var data in Enumerable.Range(0, InPortData.Count).Zip(portNames, (data, name) => new { Index=data, Name=name }))
+            foreach (
+                var data in
+                    Enumerable.Range(0, InPortData.Count)
+                              .Zip(portNames, (data, name) => new { Index = data, Name = name }))
             {
                 //Fetch the corresponding port
                 //var port = InPorts[i];
@@ -528,7 +524,7 @@ namespace Dynamo.Nodes
                     //Debug.WriteLine(string.Format("Connecting input {0}", data.Name));
 
                     //Compile input and connect it
-                    node.ConnectInput(data.Name, input.Item2.Build(preBuilt, input.Item1));
+                    node.ConnectInput(data.Name, input.Item2.Build(preBuilt, input.Item1, typeDict));
                 }
                 else //othwise, remember that this is a partial application
                 {
@@ -541,36 +537,38 @@ namespace Dynamo.Nodes
 
             if (OutPortData.Count > 1)
             {
-                foreach (var data in partialSymList)
+                foreach (string data in partialSymList)
                     node.ConnectInput(data, new SymbolNode(data));
 
                 InputNode prev = node;
                 int prevIndex = 0;
 
-                foreach (var data in Enumerable.Range(0, OutPortData.Count).Zip(OutPortData, (i, d) => new { Index = i, Data = d }))
+                foreach (
+                    var data in
+                        Enumerable.Range(0, OutPortData.Count).Zip(OutPortData, (i, d) => new { Index = i, Data = d }))
                 {
                     if (HasOutput(data.Index))
                     {
                         if (data.Index > 0)
                         {
-                            var diff = data.Index - prevIndex;
+                            int diff = data.Index - prevIndex;
                             InputNode restNode;
                             if (diff > 1)
                             {
-                                restNode = new ExternalFunctionNode(FScheme.Drop, new List<string>() { "amt", "list" });
+                                restNode = new ExternalFunctionNode(FScheme.Drop, new List<string> { "amt", "list" });
                                 restNode.ConnectInput("amt", new NumberNode(diff));
                                 restNode.ConnectInput("list", prev);
                             }
                             else
                             {
-                                restNode = new ExternalFunctionNode(FScheme.Cdr, new List<string>() { "list" });
+                                restNode = new ExternalFunctionNode(FScheme.Cdr, new List<string> { "list" });
                                 restNode.ConnectInput("list", prev);
                             }
                             prev = restNode;
                             prevIndex = data.Index;
                         }
 
-                        var firstNode = new ExternalFunctionNode(FScheme.Car, new List<string>() { "list" });
+                        var firstNode = new ExternalFunctionNode(FScheme.Car, new List<string> { "list" });
                         firstNode.ConnectInput("list", prev);
 
                         if (partial)
@@ -581,16 +579,12 @@ namespace Dynamo.Nodes
                 }
             }
             else
-            {
                 nodes[outPort] = node;
-            }
 
             //If this is a partial application, then remember not to re-eval.
             if (partial)
-            {
                 RequiresRecalc = false;
-            }
-            
+
             preBuilt[this] = nodes;
 
             //And we're done
@@ -614,12 +608,16 @@ namespace Dynamo.Nodes
         /// <summary>
         /// Called right before Evaluate() is called. Useful for processing side-effects without touching Evaluate()
         /// </summary>
-        protected virtual void OnEvaluate() { }
+        protected virtual void OnEvaluate()
+        {
+        }
 
         /// <summary>
         /// Called when the node's workspace has been saved.
         /// </summary>
-        protected internal virtual void OnSave() { }
+        protected internal virtual void OnSave()
+        {
+        }
 
         internal void onSave()
         {
@@ -630,27 +628,27 @@ namespace Dynamo.Nodes
         private void savePortMappings()
         {
             //Save all of the connection states, so we can check if this is dirty
-            foreach (var data in Enumerable.Range(0, InPortData.Count))
+            foreach (int data in Enumerable.Range(0, InPortData.Count))
             {
                 Tuple<int, dynNodeModel> input;
 
-                previousInputPortMappings[data] = TryGetInput(data, out input)
-                   ? input
-                   : null;
+                _previousInputPortMappings[data] = TryGetInput(data, out input)
+                                                      ? input
+                                                      : null;
             }
 
-            foreach (var data in Enumerable.Range(0, OutPortData.Count))
+            foreach (int data in Enumerable.Range(0, OutPortData.Count))
             {
                 HashSet<Tuple<int, dynNodeModel>> outputs;
 
-                previousOutputPortMappings[data] = TryGetOutput(data, out outputs)
-                    ? outputs
-                    : new HashSet<Tuple<int, dynNodeModel>>();
+                _previousOutputPortMappings[data] = TryGetOutput(data, out outputs)
+                                                       ? outputs
+                                                       : new HashSet<Tuple<int, dynNodeModel>>();
             }
         }
 
 
-        private Value evalIfDirty(FSharpList<Value> args)
+        private FScheme.Value evalIfDirty(FSharpList<FScheme.Value> args)
         {
             if (OldValue == null || !SaveResult || RequiresRecalc)
             {
@@ -663,27 +661,17 @@ namespace Dynamo.Nodes
             return OldValue;
         }
 
-        /// <summary>
-        /// Wraps node evaluation logic so that it can be called in different threads.
-        /// </summary>
-        /// <returns>Some(Value) -> Result | None -> Run was cancelled</returns>
-        private delegate FSharpOption<Value> InnerEvaluationDelegate();
-
-        private readonly Dictionary<PortData, Value> _evaluationDict = new Dictionary<PortData, Value>();
-
-        public Value GetValue(int outPortIndex)
+        public FScheme.Value GetValue(int outPortIndex)
         {
             return _evaluationDict.Values.ElementAt(outPortIndex);
         }
 
-        protected internal virtual Value evaluateNode(FSharpList<Value> args)
+        protected internal virtual FScheme.Value evaluateNode(FSharpList<FScheme.Value> args)
         {
             //Debug.WriteLine("Evaluating node...");
 
             if (SaveResult)
-            {
                 savePortMappings();
-            }
 
             _evaluationDict.Clear();
 
@@ -691,100 +679,97 @@ namespace Dynamo.Nodes
             bool isInteractive = iaAttribs.Length > 0 && ((IsInteractiveAttribute)iaAttribs[0]).IsInteractive;
 
             InnerEvaluationDelegate evaluation = delegate
-            {
-                Value expr = null;
-
-                try
                 {
-                    if (Controller.RunCancelled)
-                        throw new CancelEvaluationException(false);
+                    FScheme.Value expr = null;
 
-                    __eval_internal(args, _evaluationDict);
+                    try
+                    {
+                        if (Controller.RunCancelled)
+                            throw new CancelEvaluationException(false);
 
-                    expr = OutPortData.Count == 1
-                        ? _evaluationDict[OutPortData[0]]
-                        : Value.NewList(
-                            Utils.SequenceToFSharpList(
-                                _evaluationDict.OrderBy(
-                                    pair => OutPortData.IndexOf(pair.Key))
-                                .Select(
-                                    pair => pair.Value)));
+                        __eval_internal(args, _evaluationDict);
 
-                    ValidateConnections();
-                }
-                catch (CancelEvaluationException ex)
-                {
-                    OnRunCancelled();
-                    return FSharpOption<Value>.None;
-                }
-                catch (Exception ex)
-                {
-                    Bench.Dispatcher.Invoke(new Action(
-                       delegate
-                       {
-                           Debug.WriteLine(ex.Message + " : " + ex.StackTrace);
-                           dynSettings.Controller.DynamoViewModel.Log(ex);
+                        expr = OutPortData.Count == 1
+                                   ? _evaluationDict[OutPortData[0]]
+                                   : FScheme.Value.NewList(
+                                       Utils.SequenceToFSharpList(
+                                           _evaluationDict.OrderBy(
+                                               pair => OutPortData.IndexOf(pair.Key))
+                                                          .Select(
+                                                              pair => pair.Value)));
 
-                           if (DynamoCommands.WriteToLogCmd.CanExecute(null))
-                           {
-                               DynamoCommands.WriteToLogCmd.Execute(ex.Message);
-                               DynamoCommands.WriteToLogCmd.Execute(ex.StackTrace);
-                           }
+                        ValidateConnections();
+                    }
+                    catch (CancelEvaluationException)
+                    {
+                        OnRunCancelled();
+                        return FSharpOption<FScheme.Value>.None;
+                    }
+                    catch (Exception ex)
+                    {
+                        Bench.Dispatcher.Invoke(new Action(
+                                                    delegate
+                                                        {
+                                                            Debug.WriteLine(ex.Message + " : " + ex.StackTrace);
+                                                            dynSettings.Controller.DynamoViewModel.Log(ex);
 
-                           Controller.DynamoViewModel.ShowElement(this);
-                       }
-                    ));
+                                                            if (DynamoCommands.WriteToLogCmd.CanExecute(null))
+                                                            {
+                                                                DynamoCommands.WriteToLogCmd.Execute(ex.Message);
+                                                                DynamoCommands.WriteToLogCmd.Execute(ex.StackTrace);
+                                                            }
 
-                    Error(ex.Message);
-                }
+                                                            Controller.DynamoViewModel.ShowElement(this);
+                                                        }
+                                                    ));
 
-                OnEvaluate();
+                        Error(ex.Message);
+                    }
 
-                RequiresRecalc = false;
+                    OnEvaluate();
 
-                return FSharpOption<Value>.Some(expr);
-            };
+                    RequiresRecalc = false;
+
+                    return FSharpOption<FScheme.Value>.Some(expr);
+                };
 
 //MVVM : Switched from nodeUI dispatcher to bench dispatcher 
             //C# doesn't have a Option type, so we'll just borrow F#'s instead.
-            FSharpOption<Value> result = isInteractive && dynSettings.Bench != null
-                ? (FSharpOption<Value>)dynSettings.Bench.Dispatcher.Invoke(evaluation)
-                : evaluation();
+            FSharpOption<FScheme.Value> result = isInteractive && dynSettings.Bench != null
+                                                     ? (FSharpOption<FScheme.Value>)
+                                                       dynSettings.Bench.Dispatcher.Invoke(evaluation)
+                                                     : evaluation();
 
-            if (result == FSharpOption<Value>.None)
-            {
+            if (Equals(result, FSharpOption<FScheme.Value>.None))
                 throw new CancelEvaluationException(false);
-            }
-            else
-            {
-                if (result.Value != null)
-                    return result.Value;
-                else
-                    throw new Exception("");
-            }
+            if (result.Value != null)
+                return result.Value;
+            throw new Exception("");
         }
 
         protected virtual void OnRunCancelled()
         {
-
         }
-        
-        protected internal virtual void __eval_internal(FSharpList<Value> args, Dictionary<PortData, Value> outPuts)
-        {
-            var argList = args.Select(x => x.ToString()).ToList();
-            var outPutsList = outPuts.Keys.Select(x => x.NickName).ToList();
 
-            Debug.WriteLine(string.Format("__eval_internal : {0} : {1}", 
-                string.Join(",", argList), 
-                string.Join(",", outPutsList)));
+        protected internal virtual void __eval_internal(FSharpList<FScheme.Value> args,
+                                                        Dictionary<PortData, FScheme.Value> outPuts)
+        {
+            List<string> argList = args.Select(x => x.ToString()).ToList();
+            List<string> outPutsList = outPuts.Keys.Select(x => x.NickName).ToList();
+
+            Debug.WriteLine(string.Format("__eval_internal : {0} : {1}",
+                                          string.Join(",", argList),
+                                          string.Join(",", outPutsList)));
 
             Evaluate(args, outPuts);
         }
-        
+
         /// <summary>
         /// Destroy this dynElement
         /// </summary>
-        public virtual void Destroy() { }
+        public virtual void Destroy()
+        {
+        }
 
         protected internal void DisableReporting()
         {
@@ -796,15 +781,13 @@ namespace Dynamo.Nodes
             _report = true;
         }
 
-        protected internal bool ReportingEnabled { get { return _report; } }
-
         /// <summary>
         /// Creates a Scheme representation of this dynNode and all connected dynNodes.
         /// </summary>
         /// <returns>S-Expression</returns>
         public virtual string PrintExpression()
         {
-            var nick = NickName.Replace(' ', '_');
+            string nick = NickName.Replace(' ', '_');
 
             if (!Enumerable.Range(0, InPortData.Count).Any(HasInput))
                 return nick;
@@ -826,8 +809,8 @@ namespace Dynamo.Nodes
             else
             {
                 s += "(lambda ("
-                    + string.Join(" ", InPortData.Where((_, i) => !HasInput(i)).Select(x => x.NickName))
-                    + ") (" + nick;
+                     + string.Join(" ", InPortData.Where((_, i) => !HasInput(i)).Select(x => x.NickName))
+                     + ") (" + nick;
                 //for (int i = 0; i < InPortData.Count; i++)
                 foreach (int data in Enumerable.Range(0, InPortData.Count))
                 {
@@ -854,9 +837,8 @@ namespace Dynamo.Nodes
 
         protected virtual void InPortConnected(PortData inPort, PortData outPortSender)
         {
-
         }
-        
+
         internal void ConnectOutput(int portData, int inputData, dynNodeModel nodeLogic)
         {
             if (!Outputs.ContainsKey(portData))
@@ -934,9 +916,9 @@ namespace Dynamo.Nodes
         {
             if (portType == PortType.INPUT)
             {
-                if (inPorts.Count > index)
+                if (_inPorts.Count > index)
                 {
-                    dynPortModel p = inPorts[index];
+                    dynPortModel p = _inPorts[index];
 
                     //update the name on the node
                     //e.x. when the node is being re-registered during a custom
@@ -947,35 +929,31 @@ namespace Dynamo.Nodes
                 }
                 else
                 {
-                    dynPortModel p = new dynPortModel(index, portType, this, name);
+                    var p = new dynPortModel(index, portType, this, name);
 
                     InPorts.Add(p);
 
                     //register listeners on the port
-                    p.PortConnected += new PortConnectedHandler(p_PortConnected);
-                    p.PortDisconnected += new PortConnectedHandler(p_PortDisconnected);
+                    p.PortConnected += p_PortConnected;
+                    p.PortDisconnected += p_PortDisconnected;
 
                     return p;
                 }
             }
-            else if (portType == PortType.OUTPUT)
+            if (portType == PortType.OUTPUT)
             {
-                if (outPorts.Count > index)
-                {
-                    return outPorts[index];
-                }
-                else
-                {
-                    dynPortModel p = new dynPortModel(index, portType, this, name);
+                if (_outPorts.Count > index)
+                    return _outPorts[index];
 
-                    OutPorts.Add(p);
+                var p = new dynPortModel(index, portType, this, name);
 
-                    //register listeners on the port
-                    p.PortConnected += new PortConnectedHandler(p_PortConnected);
-                    p.PortDisconnected += new PortConnectedHandler(p_PortDisconnected);
+                OutPorts.Add(p);
 
-                    return p;
-                }
+                //register listeners on the port
+                p.PortConnected += p_PortConnected;
+                p.PortDisconnected += p_PortDisconnected;
+
+                return p;
             }
             return null;
         }
@@ -988,16 +966,16 @@ namespace Dynamo.Nodes
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        void p_PortConnected(object sender, EventArgs e)
+        private void p_PortConnected(object sender, EventArgs e)
         {
             ValidateConnections();
 
             var port = (dynPortModel)sender;
             if (port.PortType == PortType.INPUT)
             {
-                var data = InPorts.IndexOf(port);
-                var startPort = port.Connectors[0].Start;
-                var outData = startPort.Owner.OutPorts.IndexOf(startPort);
+                int data = InPorts.IndexOf(port);
+                dynPortModel startPort = port.Connectors[0].Start;
+                int outData = startPort.Owner.OutPorts.IndexOf(startPort);
                 ConnectInput(
                     data,
                     outData,
@@ -1006,19 +984,19 @@ namespace Dynamo.Nodes
                     outData,
                     data,
                     this
-                );
+                    );
             }
         }
 
-        void p_PortDisconnected(object sender, EventArgs e)
+        private void p_PortDisconnected(object sender, EventArgs e)
         {
             ValidateConnections();
 
             var port = (dynPortModel)sender;
             if (port.PortType == PortType.INPUT)
             {
-                var data = InPorts.IndexOf(port);
-                var startPort = port.Connectors[0].Start;
+                int data = InPorts.IndexOf(port);
+                dynPortModel startPort = port.Connectors[0].Start;
                 DisconnectInput(data);
                 startPort.Owner.DisconnectOutput(
                     startPort.Owner.OutPorts.IndexOf(startPort),
@@ -1030,7 +1008,7 @@ namespace Dynamo.Nodes
         {
             while (inport.Connectors.Any())
             {
-                var connector = inport.Connectors[0];
+                dynConnectorModel connector = inport.Connectors[0];
                 dynSettings.Controller.DynamoModel.CurrentSpace.Connectors.Remove(connector);
                 connector.NotifyConnectedPortsOfDeletion();
             }
@@ -1049,26 +1027,22 @@ namespace Dynamo.Nodes
                 //add a port for each input
                 //distribute the ports along the 
                 //edges of the icon
-                var port = AddPort(PortType.INPUT, InPortData[count].NickName, count);
+                dynPortModel port = AddPort(PortType.INPUT, InPortData[count].NickName, count);
 
                 //MVVM: AddPort now returns a port model. You can't set the data context here.
                 //port.DataContext = this;
 
-                portDataDict[port] = pd;
+                _portDataDict[port] = pd;
                 count++;
             }
 
-            if (inPorts.Count > count)
+            if (_inPorts.Count > count)
             {
-                foreach (var inport in inPorts.Skip(count))
-                {
+                foreach (dynPortModel inport in _inPorts.Skip(count))
                     RemovePort(inport);
-                }
 
-                for (int i = inPorts.Count - 1; i >= count; i--)
-                {
-                    inPorts.RemoveAt(i);
-                }
+                for (int i = _inPorts.Count - 1; i >= count; i--)
+                    _inPorts.RemoveAt(i);
                 //InPorts.RemoveRange(count, inPorts.Count - count);
             }
         }
@@ -1086,32 +1060,28 @@ namespace Dynamo.Nodes
                 //add a port for each input
                 //distribute the ports along the 
                 //edges of the icon
-                var port = AddPort(PortType.OUTPUT, pd.NickName, count);
+                dynPortModel port = AddPort(PortType.OUTPUT, pd.NickName, count);
 
 //MVVM : don't set the data context in the model
                 //port.DataContext = this;
 
-                portDataDict[port] = pd;
+                _portDataDict[port] = pd;
                 count++;
             }
 
-            if (outPorts.Count > count)
+            if (_outPorts.Count > count)
             {
-                foreach (var outport in outPorts.Skip(count))
-                {
+                foreach (dynPortModel outport in _outPorts.Skip(count))
                     RemovePort(outport);
-                }
 
-                for (int i = outPorts.Count - 1; i >= count; i--)
-                {
-                    outPorts.RemoveAt(i);
-                }
+                for (int i = _outPorts.Count - 1; i >= count; i--)
+                    _outPorts.RemoveAt(i);
 
                 //OutPorts.RemoveRange(count, outPorts.Count - count);
             }
         }
 
-        void SetTooltip()
+        private void SetTooltip()
         {
             Type t = GetType();
             object[] rtAttribs = t.GetCustomAttributes(typeof(NodeDescriptionAttribute), true);
@@ -1124,7 +1094,7 @@ namespace Dynamo.Nodes
 
         public IEnumerable<dynConnectorModel> AllConnectors()
         {
-            return inPorts.Concat(outPorts).SelectMany((port) => port.Connectors);
+            return _inPorts.Concat(_outPorts).SelectMany(port => port.Connectors);
         }
 
         /// <summary>
@@ -1135,30 +1105,28 @@ namespace Dynamo.Nodes
         {
             // if there are inputs without connections
             // mark as dead
-            State = inPorts.Select(x => x).Any(x => x.Connectors.Count == 0) ? ElementState.DEAD : ElementState.ACTIVE;
+            State = _inPorts.Select(x => x).Any(x => x.Connectors.Count == 0) ? ElementState.Dead : ElementState.Active;
         }
 
         public void Error(string p)
         {
-            State = ElementState.ERROR;
+            State = ElementState.Error;
             ToolTipText = p;
         }
 
         public void SelectNeighbors()
         {
-            var outConnectors = this.outPorts.SelectMany(x => x.Connectors);
-            var inConnectors = this.inPorts.SelectMany(x => x.Connectors);
+            IEnumerable<dynConnectorModel> outConnectors = _outPorts.SelectMany(x => x.Connectors);
+            IEnumerable<dynConnectorModel> inConnectors = _inPorts.SelectMany(x => x.Connectors);
 
-            foreach (dynConnectorModel c in outConnectors)
+            foreach (dynConnectorModel c in outConnectors.Where(c => !DynamoSelection.Instance.Selection.Contains(c.End.Owner)))
             {
-                if (!DynamoSelection.Instance.Selection.Contains(c.End.Owner))
-                    DynamoSelection.Instance.Selection.Add(c.End.Owner);
+                DynamoSelection.Instance.Selection.Add(c.End.Owner);
             }
 
-            foreach (dynConnectorModel c in inConnectors)
+            foreach (dynConnectorModel c in inConnectors.Where(c => !DynamoSelection.Instance.Selection.Contains(c.Start.Owner)))
             {
-                if (!DynamoSelection.Instance.Selection.Contains(c.Start.Owner))
-                    DynamoSelection.Instance.Selection.Add(c.Start.Owner);
+                DynamoSelection.Instance.Selection.Add(c.Start.Owner);
             }
         }
 
@@ -1167,7 +1135,7 @@ namespace Dynamo.Nodes
 
         internal void DisableInteraction()
         {
-            State = ElementState.DEAD;
+            State = ElementState.Dead;
             InteractionEnabled = false;
         }
 
@@ -1181,9 +1149,8 @@ namespace Dynamo.Nodes
         /// Called back from the view to enable users to setup their own view elements
         /// </summary>
         /// <param name="parameter"></param>
-        public virtual void SetupCustomUIElements(dynNodeView NodeUI)
+        public virtual void SetupCustomUIElements(dynNodeView nodeUI)
         {
-            
         }
 
         /// <summary>
@@ -1203,158 +1170,84 @@ namespace Dynamo.Nodes
             ValidateConnections();
             IsSelected = false;
         }
+
         #endregion
+
+        /// <summary>
+        /// Wraps node evaluation logic so that it can be called in different threads.
+        /// </summary>
+        /// <returns>Some(Value) -> Result | None -> Run was cancelled</returns>
+        private delegate FSharpOption<FScheme.Value> InnerEvaluationDelegate();
     }
 
     public abstract class dynNodeWithOneOutput : dynNodeModel
     {
-        public override void Evaluate(FSharpList<Value> args, Dictionary<PortData, Value> outPuts)
+        public override void Evaluate(FSharpList<FScheme.Value> args, Dictionary<PortData, FScheme.Value> outPuts)
         {
-            //if this element maintains a collcection of references
-            //then clear the collection
-            if(this is IClearable)
-                (this as IClearable).ClearReferences();
-
-            List<FSharpList<Value>> argSets = new List<FSharpList<Value>>();
-            
-            //create a zip of the incoming args and the port data
-            //to be used for type comparison
-            var portComparison = args.Zip(InPortData, (first, second) => new Tuple<Type, Type>(first.GetType(), second.PortType));
-
-            //if any value is a list whose expectation is a single
-            //do an auto map
-            //TODO: figure out a better way to do this than using a lot
-            //of specific excludes
-            if (args.Count()> 0 && 
-                portComparison.Any(x => x.Item1 == typeof (Value.List) && 
-                x.Item2 != typeof (Value.List)) && 
-                !(this.ArgumentLacing == LacingStrategy.Disabled))
-            {
-                //if the argument is of the expected type, then
-                //leave it alone otherwise, wrap it in a list
-                int j = 0;
-                foreach (var arg in args)
-                {
-                    //incoming value is list and expecting single
-                    if (portComparison.ElementAt(j).Item1 == typeof (Value.List) && 
-                        portComparison.ElementAt(j).Item2 != typeof (Value.List))
-                    {
-                        //leave as list
-                        argSets.Add(((Value.List)arg).Item);
-                    }
-                    //incoming value is list and expecting list
-                    else
-                    {
-                        //wrap in list
-                        argSets.Add(Utils.MakeFSharpList(arg));
-                    }
-                    j++;
-                }
-
-                IEnumerable<IEnumerable<Value>> lacedArgs = null;
-                switch (this.ArgumentLacing)
-                {
-                    case LacingStrategy.First:
-                        lacedArgs = argSets.SingleSet();
-                        break;
-                    case LacingStrategy.Shortest:
-                        lacedArgs = argSets.ShortestSet();
-                        break;
-                    case LacingStrategy.Longest:
-                        lacedArgs = argSets.LongestSet();
-                        break;
-                    case LacingStrategy.CrossProduct:
-                        lacedArgs = argSets.CartesianProduct();
-                        break;
-                }
-
-                //setup an empty list to hold results
-                FSharpList<Value> result = FSharpList<Value>.Empty;
-
-                //run the evaluate method for each set of 
-                //arguments in the cartesian result. do these
-                //in reverse order so our cons comes out the right
-                //way around
-                for (int i = lacedArgs.Count() - 1; i >= 0; i--)
-                {
-                    var evalResult = Evaluate(Utils.MakeFSharpList(lacedArgs.ElementAt(i).ToArray()));
-                    result = FSharpList<Value>.Cons(evalResult, result);
-                }
-
-                outPuts[OutPortData[0]] = Value.NewList(result);
-            }
-            else
-            {
-                outPuts[OutPortData[0]] = Evaluate(args);  
-            }
-            
-            ValidateConnections();
+            outPuts[OutPortData[0]] = Evaluate(args);
         }
 
-        public virtual Value Evaluate(FSharpList<Value> args)
+        public virtual FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
         {
             throw new NotImplementedException();
         }
     }
 
     #region class attributes
-    [AttributeUsage(AttributeTargets.All)]
-    public class NodeNameAttribute : System.Attribute
-    {
-        public string Name { get; set; }
 
+    [AttributeUsage(AttributeTargets.All)]
+    public class NodeNameAttribute : Attribute
+    {
         public NodeNameAttribute(string elementName)
         {
             Name = elementName;
         }
+
+        public string Name { get; set; }
     }
 
     [AttributeUsage(AttributeTargets.All)]
-    public class NodeCategoryAttribute : System.Attribute
+    public class NodeCategoryAttribute : Attribute
     {
-        public string ElementCategory { get; set; }
-
         public NodeCategoryAttribute(string category)
         {
             ElementCategory = category;
         }
+
+        public string ElementCategory { get; set; }
     }
 
     [AttributeUsage(AttributeTargets.All)]
-    public class NodeSearchTagsAttribute : System.Attribute
+    public class NodeSearchTagsAttribute : Attribute
     {
-        public List<string> Tags { get; set; }
-
         public NodeSearchTagsAttribute(params string[] tags)
         {
             Tags = tags.ToList();
         }
+
+        public List<string> Tags { get; set; }
     }
 
     [AttributeUsage(AttributeTargets.All, Inherited = true)]
-    public class IsInteractiveAttribute : System.Attribute
+    public class IsInteractiveAttribute : Attribute
     {
-        public bool IsInteractive { get; set; }
-
         public IsInteractiveAttribute(bool isInteractive)
         {
             IsInteractive = isInteractive;
         }
+
+        public bool IsInteractive { get; set; }
     }
 
     [AttributeUsage(AttributeTargets.All)]
-    public class NodeDescriptionAttribute : System.Attribute
+    public class NodeDescriptionAttribute : Attribute
     {
-        public string ElementDescription
-        {
-            get;
-            set;
-        }
-
         public NodeDescriptionAttribute(string description)
         {
             ElementDescription = description;
         }
+
+        public string ElementDescription { get; set; }
     }
 
     /// <summary>
@@ -1365,12 +1258,12 @@ namespace Dynamo.Nodes
     [AttributeUsage(AttributeTargets.All)]
     public class DoNotLoadOnPlatformsAttribute : Attribute
     {
-        public string[] Values { get; set; }
-
         public DoNotLoadOnPlatformsAttribute(params string[] values)
         {
-            this.Values = values;
+            Values = values;
         }
+
+        public string[] Values { get; set; }
     }
 
     /// <summary>
@@ -1381,60 +1274,59 @@ namespace Dynamo.Nodes
     [AttributeUsage(AttributeTargets.All)]
     public class AlsoKnownAsAttribute : Attribute
     {
-        public string[] Values { get; set; }
-
         public AlsoKnownAsAttribute(params string[] values)
         {
-            this.Values = values;
+            Values = values;
         }
+
+        public string[] Values { get; set; }
     }
 
     #endregion
 
     public class PredicateTraverser
     {
-        Predicate<dynNodeModel> predicate;
+        private readonly Predicate<dynNodeModel> _predicate;
 
-        Dictionary<dynNodeModel, bool> resultDict = new Dictionary<dynNodeModel, bool>();
+        private readonly Dictionary<dynNodeModel, bool> _resultDict = new Dictionary<dynNodeModel, bool>();
 
-        bool inProgress;
+        private bool _inProgress;
 
         public PredicateTraverser(Predicate<dynNodeModel> p)
         {
-            predicate = p;
+            _predicate = p;
         }
 
         public bool TraverseUntilAny(dynNodeModel entry)
         {
-            inProgress = true;
+            _inProgress = true;
             bool result = traverseAny(entry);
-            resultDict.Clear();
-            inProgress = false;
+            _resultDict.Clear();
+            _inProgress = false;
             return result;
         }
 
         public bool ContinueTraversalUntilAny(dynNodeModel entry)
         {
-            if (inProgress)
+            if (_inProgress)
                 return traverseAny(entry);
-            else
-                throw new Exception("ContinueTraversalUntilAny cannot be used except in a traversal predicate.");
+            throw new Exception("ContinueTraversalUntilAny cannot be used except in a traversal predicate.");
         }
 
         private bool traverseAny(dynNodeModel entry)
         {
             bool result;
-            if (resultDict.TryGetValue(entry, out result))
+            if (_resultDict.TryGetValue(entry, out result))
                 return result;
 
-            result = predicate(entry);
-            resultDict[entry] = result;
+            result = _predicate(entry);
+            _resultDict[entry] = result;
             if (result)
-                return result;
+                return true;
 
             if (entry is dynFunction)
             {
-                var symbol = Guid.Parse((entry as dynFunction).Symbol);
+                Guid symbol = Guid.Parse((entry as dynFunction).Symbol);
                 if (!dynSettings.Controller.CustomNodeLoader.Contains(symbol))
                 {
                     dynSettings.Controller.DynamoViewModel.Log("WARNING -- No implementation found for node: " + symbol);
@@ -1443,22 +1335,20 @@ namespace Dynamo.Nodes
                 }
 
                 result = dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(symbol)
-                    .Workspace.GetTopMostNodes().Any(ContinueTraversalUntilAny);
+                                    .Workspace.GetTopMostNodes().Any(ContinueTraversalUntilAny);
             }
-            resultDict[entry] = result;
-            if (result)
-                return result;
-
-            return entry.Inputs.Values.Any(x => x != null && traverseAny(x.Item2));
+            _resultDict[entry] = result;
+            return result || entry.Inputs.Values.Any(x => x != null && traverseAny(x.Item2));
         }
     }
 
-    public class UIDispatcherEventArgs:EventArgs
+    public class UIDispatcherEventArgs : EventArgs
     {
-        public Action ActionToDispatch { get; set; }
         public UIDispatcherEventArgs(Action a)
         {
             ActionToDispatch = a;
         }
+
+        public Action ActionToDispatch { get; set; }
     }
 }

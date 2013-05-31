@@ -14,6 +14,7 @@
 
 using System.Drawing;
 using Dynamo.Connectors;
+using Dynamo.Nodes.TypeSystem;
 using Microsoft.FSharp.Collections;
 using Value = Dynamo.FScheme.Value;
 
@@ -26,15 +27,15 @@ namespace Dynamo.Nodes
     {
         public dynColorBrightness()
         {
-            InPortData.Add(new PortData("c", "The color", typeof(Value.Container)));
-            OutPortData.Add(new PortData("mag", "The magnitude of the color's vector", typeof(Value.Number)));
+            InPortData.Add(new PortData("c", "The color", new ObjectType(typeof(Color))));
+            OutPortData.Add(new PortData("mag", "The magnitude of the color's vector", new NumberType()));
 
             RegisterAllPorts();
         }
 
         public override Value Evaluate(FSharpList<Value> args)
         {
-            Color c = (Color)((Value.Container)args[0]).Item;
+            var c = (Color)((Value.Container)args[0]).Item;
 
             return Value.NewNumber(c.GetBrightness());
         }

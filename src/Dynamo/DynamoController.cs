@@ -2,15 +2,18 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Windows.Input;
 using Dynamo.Controls;
 using Dynamo.FSchemeInterop;
 using Dynamo.FSchemeInterop.Node;
 using Dynamo.Nodes;
+using Dynamo.Nodes.TypeSystem;
 using Dynamo.PackageManager;
 using Dynamo.Search;
 using Dynamo.Utilities;
+using Microsoft.FSharp.Collections;
 
 namespace Dynamo
 {
@@ -33,16 +36,14 @@ namespace Dynamo
     {
         #region properties
 
-        private readonly SortedDictionary<string, TypeLoadData> builtinTypesByNickname =
+        private readonly SortedDictionary<string, TypeLoadData> _builtinTypesByNickname =
             new SortedDictionary<string, TypeLoadData>();
 
-        private readonly Dictionary<string, TypeLoadData> builtinTypesByTypeName =
+        private readonly Dictionary<string, TypeLoadData> _builtinTypesByTypeName =
             new Dictionary<string, TypeLoadData>();
 
-        private readonly Queue<Tuple<object, object>> commandQueue = new Queue<Tuple<object, object>>();
-        
-        
-        private bool isProcessingCommandQueue = false;
+        private readonly Queue<Tuple<object, object>> _commandQueue = new Queue<Tuple<object, object>>();
+
 
         public CustomNodeLoader CustomNodeLoader { get; internal set; }
         public SearchViewModel SearchViewModel { get; internal set; }
@@ -51,42 +52,29 @@ namespace Dynamo
         public PackageManagerClient PackageManagerClient { get; internal set; }
         public DynamoViewModel DynamoViewModel { get; internal set; }
         public DynamoModel DynamoModel { get; set; }
-        
-        List<dynModelBase> clipBoard = new List<dynModelBase>();
-        public List<dynModelBase> ClipBoard
-        {
-            get { return clipBoard; }
-            set { clipBoard = value; }
-        }
 
-        public bool IsProcessingCommandQueue
-        {
-            get { return isProcessingCommandQueue; }
-        }
+        public List<dynModelBase> ClipBoard { get; set; }
+
+        public bool IsProcessingCommandQueue { get; private set; }
 
         public Queue<Tuple<object, object>> CommandQueue
         {
-            get { return commandQueue; }
+            get { return _commandQueue; }
         }
 
         public SortedDictionary<string, TypeLoadData> BuiltInTypesByNickname
         {
-            get { return builtinTypesByNickname; }
+            get { return _builtinTypesByNickname; }
         }
 
         public Dictionary<string, TypeLoadData> BuiltInTypesByName
         {
-            get { return builtinTypesByTypeName; }
+            get { return _builtinTypesByTypeName; }
         }
 
         public ExecutionEnvironment FSchemeEnvironment { get; private set; }
 
-        private string context;
-        public string Context
-        {
-            get { return context; }
-            set { context = value; }
-        }
+        public string Context { get; set; }
 
         #endregion
 
@@ -111,9 +99,11 @@ namespace Dynamo
         /// </summary>
         public DynamoController(ExecutionEnvironment env, bool withUI, Type viewModelType, string context)
         {
+            ClipBoard = new List<dynModelBase>();
+            IsProcessingCommandQueue = false;
             dynSettings.Controller = this;
 
-            this.Context = context;
+            Context = context;
 
             //MVVM: don't construct the main window with a reference to the controller
             //dynSettings.Bench = new dyndynSettings.Bench(this);
@@ -121,13 +111,17 @@ namespace Dynamo
             //MVVM : create the view model to which the main window will bind
             //the DynamoModel is created therein
             //this.DynamoViewModel = new DynamoViewModel(this);
-            this.DynamoViewModel = (DynamoViewModel)Activator.CreateInstance(viewModelType,new object[]{this});
+            DynamoViewModel = (DynamoViewModel)Activator.CreateInstance(viewModelType,new object[]{this});
 
             // custom node loader
             string directory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            string pluginsPath = Path.Combine(directory, "definitions");
+            
+            if (directory != null) 
+            {
+                string pluginsPath = Path.Combine(directory, "definitions");
 
-            CustomNodeLoader = new CustomNodeLoader(pluginsPath);
+                CustomNodeLoader = new CustomNodeLoader(pluginsPath);
+            }
 
             if (withUI)
             {
@@ -181,7 +175,7 @@ namespace Dynamo
             if (FScheme.RunTests(dynSettings.Controller.DynamoViewModel.Log))
             {
                 if (dynSettings.Bench != null)
-                    this.DynamoViewModel.Log("All Tests Passed. Core library loaded OK.");
+                    DynamoViewModel.Log("All Tests Passed. Core library loaded OK.");
             }
         }
 
@@ -195,19 +189,21 @@ namespace Dynamo
 
         #region CommandQueue
     
+/*
         private void Hooks_DispatcherInactive(object sender, EventArgs e)
         {
             ProcessCommandQueue();
         }
+*/
 
         /// <summary>
         ///     Run all of the commands in the CommandQueue
         /// </summary>
         public void ProcessCommandQueue()
         {
-            while (commandQueue.Count > 0)
+            while (_commandQueue.Count > 0)
             {
-                var cmdData = commandQueue.Dequeue();
+                var cmdData = _commandQueue.Dequeue();
                 var cmd = cmdData.Item1 as ICommand;
                 if (cmd != null)
                 {
@@ -217,7 +213,7 @@ namespace Dynamo
                     }
                 }
             }
-            commandQueue.Clear();
+            _commandQueue.Clear();
 
             if (dynSettings.Bench != null)
             {
@@ -233,7 +229,7 @@ namespace Dynamo
         //protected bool _debug;
         private bool _showErrors;
 
-        private bool runAgain;
+        private bool _runAgain;
         public bool Running { get; protected set; }
 
         public bool RunCancelled { get; protected internal set; }
@@ -241,7 +237,7 @@ namespace Dynamo
         internal void QueueRun()
         {
             RunCancelled = true;
-            runAgain = true;
+            _runAgain = true;
         }
 
         public void RunExpression(bool showErrors = true)
@@ -255,7 +251,7 @@ namespace Dynamo
             //TODO: Hack. Might cause things to break later on...
             //Reset Cancel and Rerun flags
             RunCancelled = false;
-            runAgain = false;
+            _runAgain = false;
 
             //We are now considered running
             Running = true;
@@ -293,7 +289,7 @@ namespace Dynamo
             DynamoLogger.Instance.Log("******EVALUATION THREAD START*******");
 
             //Get our entry points (elements with nothing connected to output)
-            IEnumerable<dynNodeModel> topElements = DynamoViewModel.Model.HomeSpace.GetTopMostNodes();
+            List<dynNodeModel> topElements = DynamoViewModel.Model.HomeSpace.GetTopMostNodes().ToList();
 
             //Mark the topmost as dirty/clean
             foreach (dynNodeModel topMost in topElements)
@@ -302,6 +298,15 @@ namespace Dynamo
             //TODO: Flesh out error handling
             try
             {
+                var typeDict = new Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>>();
+                FSharpMap<dynSymbol, TypeScheme> typeEnv = MapModule.Empty<dynSymbol, TypeScheme>();
+
+                foreach (dynNodeModel node in topElements)
+                {
+                    foreach (var j in Enumerable.Range(0, node.OutPortData.Count))
+                        node.TypeCheck(j, typeEnv, typeDict);
+                }
+
                 var topNode = new BeginNode(new List<string>());
                 int i = 0;
                 var buildDict = new Dictionary<dynNodeModel, Dictionary<int, INode>>();
@@ -309,7 +314,7 @@ namespace Dynamo
                 {
                     string inputName = i.ToString();
                     topNode.AddInput(inputName);
-                    topNode.ConnectInput(inputName, topMost.BuildExpression(buildDict));
+                    topNode.ConnectInput(inputName, topMost.BuildExpression(buildDict, typeDict));
 
                     i++;
 
@@ -334,7 +339,7 @@ namespace Dynamo
 
                 //If we are forcing this, then make sure we don't run again either.
                 if (ex.Force)
-                    runAgain = false;
+                    _runAgain = false;
 
                 OnRunCompleted(this, false);
             }
@@ -351,7 +356,7 @@ namespace Dynamo
                 OnRunCancelled(true);
 
                 //Reset the flags
-                runAgain = false;
+                _runAgain = false;
                 RunCancelled = true;
 
                 OnRunCompleted(this, false);
@@ -378,17 +383,15 @@ namespace Dynamo
 
                 
                 //If we should run again...
-                if (runAgain)
+                if (_runAgain)
                 {
                     //Reset flag
-                    runAgain = false;
+                    _runAgain = false;
 
                     if (dynSettings.Bench != null)
                     {
                         //Run this method again from the main thread
-                        dynSettings.Bench.Dispatcher.BeginInvoke(new Action(
-                                                                     delegate { RunExpression(_showErrors); }
-                                                                     ));
+                        dynSettings.Bench.Dispatcher.BeginInvoke(new Action(() => RunExpression(_showErrors)));
                     }
                 }
                 else
@@ -409,15 +412,11 @@ namespace Dynamo
                 {
                     //string exp = FScheme.print(runningExpression);
                     dynSettings.Bench.Dispatcher.Invoke(new Action(
-                                                delegate
-                                                    {
-                                                        foreach (dynNodeModel node in topElements)
-                                                        {
-                                                            string exp = node.PrintExpression();
-                                                            dynSettings.Controller.DynamoViewModel.Log("> " + exp);
-                                                        }
-                                                    }
-                                                ));
+                        () =>
+                        {
+                            foreach (string exp in topElements.Select(node => node.PrintExpression()))
+                                dynSettings.Controller.DynamoViewModel.Log("> " + exp);
+                        }));
                 }
             }
 
@@ -434,9 +433,7 @@ namespace Dynamo
                     if (DynamoViewModel.RunInDebug && expr != null)
                     {
                         dynSettings.Bench.Dispatcher.Invoke(new Action(
-                                                    () =>
-                                                    dynSettings.Controller.DynamoViewModel.Log(FScheme.print(expr))
-                                                    ));
+                            () => dynSettings.Controller.DynamoViewModel.Log(FScheme.print(expr))));
                     }
                 }
             }
@@ -447,7 +444,7 @@ namespace Dynamo
                 OnRunCancelled(false);
                 //this.RunCancelled = false;
                 if (ex.Force)
-                    runAgain = false;
+                    _runAgain = false;
             }
             catch (Exception ex)
             {
@@ -459,14 +456,13 @@ namespace Dynamo
                     if (ex.Message.Length > 0)
                     {
                         dynSettings.Bench.Dispatcher.Invoke(new Action(
-                                                    delegate { dynSettings.Controller.DynamoViewModel.Log(ex); }
-                                                    ));
+                            () => dynSettings.Controller.DynamoViewModel.Log(ex)));
                     }
                 }
 
                 OnRunCancelled(true);
                 RunCancelled = true;
-                runAgain = false;
+                _runAgain = false;
             }
 
             OnEvaluationCompleted();
