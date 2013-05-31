@@ -9,7 +9,7 @@ using Dynamo.Controls;
 using Dynamo.FSchemeInterop;
 using Dynamo.FSchemeInterop.Node;
 using Dynamo.Nodes;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 using Dynamo.PackageManager;
 using Dynamo.Search;
 using Dynamo.Utilities;

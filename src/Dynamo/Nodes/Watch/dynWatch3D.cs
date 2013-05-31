@@ -16,7 +16,7 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Collections.Generic;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 using Microsoft.FSharp.Collections;
 using Dynamo.Connectors;
 using Value = Dynamo.FScheme.Value;

@@ -5,7 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Xml;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 using Microsoft.FSharp.Collections;
 
 using Dynamo.Controls;

@@ -20,7 +20,7 @@ using Dynamo.Connectors;
 using Dynamo.Controls;
 using Dynamo.FSchemeInterop;
 using Dynamo.FSchemeInterop.Node;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 using Dynamo.Utilities;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
@@ -418,7 +418,7 @@ namespace Dynamo.Nodes
             InPortData.Add(new PortData("f(x, a)", "Reductor Funtion", new FunctionType(a, b, b)));
             InPortData.Add(new PortData("a", "Seed", b));
             InPortData.Add(new PortData("seq", "Sequence", new ListType(a)));
-            OutPortData.Add(new PortData("out", "Result", new ListType(b)));
+            OutPortData.Add(new PortData("out", "Result", b));
 
             RegisterAllPorts();
         }

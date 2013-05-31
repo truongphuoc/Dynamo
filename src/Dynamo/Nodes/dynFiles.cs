@@ -19,7 +19,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Linq;
 using Dynamo.Connectors;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 using Dynamo.Utilities;
 using Microsoft.FSharp.Collections;
 using Value = Dynamo.FScheme.Value;

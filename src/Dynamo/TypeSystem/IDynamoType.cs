@@ -2,61 +2,49 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Dynamo.Nodes;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
 
-namespace Dynamo.Nodes.TypeSystem
+namespace Dynamo.TypeSystem
 {
     internal static class UnifyExtension
     {
-        private static bool unify(GuessType t1, IDynamoType t2)
-        {
-            if (t1.HasType)
-                return t1.Type.Unify(t2);
-
-            t1.Type = t2;
-            return true;
-        }
-
-        private static bool unify(ObjectType t1, ObjectType t2)
-        {
-            return t1.Type.IsAssignableFrom(t2.Type) || t2.Type.IsAssignableFrom(t1.Type);
-        }
-
-        private static bool unify(IDynamoType t1, GuessType t2)
-        {
-            return Unify(t2, t1);
-        }
-
-        private static bool unify(FunctionType t1, FunctionType t2)
-        {
-            return t1.Inputs.Zip(t2.Inputs, Tuple.Create).All(x => x.Item1.Unify(x.Item2))
-                   && t1.Output.Unify(t2.Output);
-        }
-
-        private static bool unify(ListType t1, ListType t2)
-        {
-            return Unify(t1.InnerType, t2.InnerType);
-        }
-
-        private static bool unify(IDynamoType t1, ListType t2)
-        {
-            return unify(t2, t1);
-        }
-
-        private static bool unify(ListType t1, IDynamoType t2)
-        {
-            return Unify(t1.InnerType, t2);
-        }
-
-        private static bool unify(IDynamoType a, IDynamoType b)
-        {
-            return false;
-        }
-
         public static bool Unify(this IDynamoType a, IDynamoType b)
         {
-            return a.Equals(b) || unify(a as dynamic, b as dynamic);
+            //return a.Equals(b) || unify(a as dynamic, b as dynamic);
+
+            if (a.Equals(b))
+                return true;
+
+            if (a is GuessType)
+            {
+                var t1 = a as GuessType;
+                if (t1.HasType)
+                    return t1.Type.Unify(b);
+                t1.Type = b;
+                return true;
+            }
+
+            if (b is GuessType)
+                return b.Unify(a);
+
+            if (a is FunctionType && b is FunctionType)
+            {
+                var t1 = (FunctionType)a;
+                var t2 = (FunctionType)b;
+                return t1.Inputs.Zip(t2.Inputs, Tuple.Create).All(x => x.Item1.Unify(x.Item2))
+                       && t1.Output.Unify(t2.Output);
+            }
+
+            if (a is ListType && b is ListType)
+            {
+                var t1 = (ListType)a;
+                var t2 = (ListType)b;
+                return t1.InnerType.Unify(t2.InnerType);
+            }
+
+            return false;
         }
     }
 
@@ -64,7 +52,7 @@ namespace Dynamo.Nodes.TypeSystem
     {
         IDynamoType Subst(FSharpMap<Guid, IDynamoType> vsAndTs);
         FSharpSet<IDynamoType> GatherGuesses(FSharpSet<IDynamoType> accumulator);
-        IDynamoType Unwrap(IDynamoType noneCase);
+        IDynamoType Unwrap();
     }
 
     internal interface IAtomType : IDynamoType
@@ -127,7 +115,7 @@ namespace Dynamo.Nodes.TypeSystem
             return a;
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
             return this;
         }
@@ -169,9 +157,9 @@ namespace Dynamo.Nodes.TypeSystem
                 (a, x) => x.GatherGuesses(a));
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
-            return this;
+            return new FunctionType(Inputs.Select(x => x.Unwrap()), Output.Unwrap());
         }
 
         public int CompareTo(object obj)
@@ -185,7 +173,7 @@ namespace Dynamo.Nodes.TypeSystem
         public IDynamoType Type1 { get; private set; }
         public IDynamoType Type2 { get; private set; }
 
-       public TypeIntersection(IDynamoType type, params IDynamoType[] types) 
+        public TypeIntersection(IDynamoType type, params IDynamoType[] types) 
             : this(new[] { type }.Concat(types))
         { }
 
@@ -212,9 +200,9 @@ namespace Dynamo.Nodes.TypeSystem
             return Type2.GatherGuesses(Type1.GatherGuesses(accumulator));
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
-            return this;
+            return new TypeIntersection(Type1.Unwrap(), Type2.Unwrap());
         }
 
         public int CompareTo(object obj)
@@ -255,9 +243,9 @@ namespace Dynamo.Nodes.TypeSystem
             return Type2.GatherGuesses(Type1.GatherGuesses(accumulator));
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
-            return this;
+            return new TypeUnion(Type1.Unwrap(), Type2.Unwrap());
         }
 
         public int CompareTo(object obj)
@@ -285,9 +273,9 @@ namespace Dynamo.Nodes.TypeSystem
             return InnerType.GatherGuesses(accumulator);
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
-            return this;
+            return new ListType(InnerType.Unwrap());
         }
 
         public int CompareTo(object obj)
@@ -308,7 +296,7 @@ namespace Dynamo.Nodes.TypeSystem
             return accumulator;
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
             return this;
         }
@@ -331,7 +319,7 @@ namespace Dynamo.Nodes.TypeSystem
             return accumulator;
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
             return this;
         }
@@ -354,7 +342,7 @@ namespace Dynamo.Nodes.TypeSystem
             return accumulator;
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
             return this;
         }
@@ -367,12 +355,22 @@ namespace Dynamo.Nodes.TypeSystem
 
     public struct ObjectType : IAtomType
     {
+        public bool Equals(ObjectType other)
+        {
+            return Type == other.Type;
+        }
+
+        public override int GetHashCode()
+        {
+            return (Type != null ? Type.GetHashCode() : 0);
+        }
+
         public ObjectType(Type t)
         {
             Type = t;
         }
 
-        public Type Type;
+        public readonly Type Type;
 
         public IDynamoType Subst(FSharpMap<Guid, IDynamoType> vsAndTs)
         {
@@ -384,7 +382,7 @@ namespace Dynamo.Nodes.TypeSystem
             return accumulator;
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
             return this;
         }
@@ -393,16 +391,27 @@ namespace Dynamo.Nodes.TypeSystem
         {
             throw new NotImplementedException();
         }
+
+        public override bool Equals(object obj)
+        {
+            return obj is ObjectType && ((ObjectType)obj).Type == Type;
+        }
     }
 
     public class GuessType : IDynamoType
     {
+        private IDynamoType _type;
+
         internal bool HasType
         {
             get { return Type != null; }
         }
 
-        internal IDynamoType Type;
+        internal IDynamoType Type
+        {
+            get { return _type; }
+            set { _type = value.Unwrap(); }
+        }
 
         public IDynamoType Subst(FSharpMap<Guid, IDynamoType> vsAndTs)
         {
@@ -414,11 +423,11 @@ namespace Dynamo.Nodes.TypeSystem
             return accumulator.Add(this);
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
-            if (HasType)
-                return Type.Unwrap(noneCase);
-            return Type = noneCase;
+            return HasType 
+                ? Type.Unwrap() 
+                : this;
         }
 
         public int CompareTo(object obj)
@@ -466,7 +475,7 @@ namespace Dynamo.Nodes.TypeSystem
             return accumulator;
         }
 
-        public IDynamoType Unwrap(IDynamoType noneCase)
+        public IDynamoType Unwrap()
         {
             return this;
         }

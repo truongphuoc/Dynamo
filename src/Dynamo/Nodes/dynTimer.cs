@@ -13,7 +13,7 @@
 //limitations under the License.
 
 using Dynamo.Connectors;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 using Microsoft.FSharp.Collections;
 
 using Value = Dynamo.FScheme.Value;

@@ -27,7 +27,7 @@ using Dynamo.Controls;
 using Dynamo.Nodes;
 using Dynamo.PackageManager;
 using System.Windows.Input;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 
 namespace Dynamo.Utilities
 {

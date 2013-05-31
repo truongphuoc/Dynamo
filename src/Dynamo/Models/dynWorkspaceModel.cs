@@ -226,7 +226,7 @@ namespace Dynamo
 
         public IEnumerable<dynNodeModel> GetTopMostNodes()
         {
-            return this.Nodes.Where(
+            return Nodes.Where(
                x => x.OutPortData.Any() && x.OutPorts.All(y => !y.Connectors.Any())
             );
         }

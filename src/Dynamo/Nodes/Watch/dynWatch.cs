@@ -19,7 +19,7 @@ using System.Collections.Generic;
 using System.Linq;
 //using Autodesk.Revit.DB;
 using Dynamo.Connectors;
-using Dynamo.Nodes.TypeSystem;
+using Dynamo.TypeSystem;
 using Microsoft.FSharp.Collections;
 using Value = Dynamo.FScheme.Value;
 using Dynamo.Controls;
