@@ -75,7 +75,7 @@ namespace Dynamo.TypeSystem
             return new TypeScheme(ListModule.Empty<Guid>(), new GuessType());
         }
 
-        public static TypeScheme Generalize(FSharpMap<dynSymbol, TypeScheme> env, IDynamoType t)
+        public static TypeScheme Generalize(FSharpMap<string, TypeScheme> env, IDynamoType t)
         {
             var empty = SetModule.Empty<IDynamoType>();
             var tGs = t.GatherGuesses(empty);

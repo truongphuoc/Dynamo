@@ -97,12 +97,6 @@ namespace Dynamo
             var worker = new BackgroundWorker();
             worker.DoWork += EvaluationThread;
 
-            //Disable Run Button
-
-            //dynSettings.Bench.Dispatcher.Invoke(new Action(
-            //   delegate { dynSettings.Bench.RunButton.IsEnabled = false; }
-            //));
-
             DynamoModel.RunEnabled = false;
 
             //Let's start
@@ -128,7 +122,7 @@ namespace Dynamo
                 int i = 0;
 
                 var typeDict = new Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>>();
-                FSharpMap<dynSymbol, TypeScheme> typeEnv = MapModule.Empty<dynSymbol, TypeScheme>();
+                FSharpMap<string, TypeScheme> typeEnv = MapModule.Empty<string, TypeScheme>();
 
                 foreach (dynNodeModel node in topElements)
                 {
@@ -186,14 +180,6 @@ namespace Dynamo
             {
                 /* Post-evaluation cleanup */
 
-                //Re-enable run button
-                //dynSettings.Bench.Dispatcher.Invoke(new Action(
-                //   delegate
-                //   {
-                //       dynSettings.Bench.RunButton.IsEnabled = true;
-                //   }
-                //));
-
                 DynamoModel.RunEnabled = true;
 
                 //No longer running
@@ -201,7 +187,6 @@ namespace Dynamo
 
                 foreach (FunctionDefinition def in dynSettings.FunctionWasEvaluated)
                     def.RequiresRecalc = false;
-
 
                 //If we should run again...
                 if (runAgain)

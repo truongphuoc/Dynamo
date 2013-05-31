@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Input;
+using System.Windows.Threading;
+
 using Dynamo.Controls;
 using Dynamo.FSchemeInterop;
 using Dynamo.FSchemeInterop.Node;
@@ -14,6 +16,9 @@ using Dynamo.PackageManager;
 using Dynamo.Search;
 using Dynamo.Utilities;
 using Microsoft.FSharp.Collections;
+
+using NUnit.Core;
+using NUnit.Framework;
 
 namespace Dynamo
 {
@@ -44,6 +49,8 @@ namespace Dynamo
 
         private readonly Queue<Tuple<object, object>> _commandQueue = new Queue<Tuple<object, object>>();
 
+        private bool isProcessingCommandQueue = false;
+        private bool testing = false;
 
         public CustomNodeLoader CustomNodeLoader { get; internal set; }
         public SearchViewModel SearchViewModel { get; internal set; }
@@ -52,7 +59,19 @@ namespace Dynamo
         public PackageManagerClient PackageManagerClient { get; internal set; }
         public DynamoViewModel DynamoViewModel { get; internal set; }
         public DynamoModel DynamoModel { get; set; }
-
+        public Dispatcher UIDispatcher { get; set; }
+        
+        /// <summary>
+        /// Testing flag is used to defer calls to run in the idle thread
+        /// with the assumption that the entire test will be wrapped in an
+        /// idle thread call.
+        /// </summary>
+        public bool Testing 
+        {
+            get { return testing; }
+            set { testing = value; }
+        }
+        
         public List<dynModelBase> ClipBoard { get; set; }
 
         public bool IsProcessingCommandQueue { get; private set; }
@@ -128,6 +147,7 @@ namespace Dynamo
                 dynSettings.Bench = new DynamoView();
                 dynSettings.Bench = dynSettings.Bench;
                 dynSettings.Bench.DataContext = DynamoViewModel;
+                this.UIDispatcher = dynSettings.Bench.Dispatcher;
             }
 
 
@@ -188,13 +208,36 @@ namespace Dynamo
         }
 
         #region CommandQueue
-    
-/*
+
+
+        /// <summary>
+        /// Add a command to the CommandQueue and run ProcessCommandQueue(), providing null as the 
+        /// command arguments
+        /// </summary>
+        /// <param name="command">The command to run</param>
+        public void RunCommand(ICommand command)
+        {
+            RunCommand(command, null);
+        }
+
+        /// <summary>
+        /// Add a command to the CommandQueue and run ProcessCommandQueue(), providing the given
+        /// arguments to the command
+        /// </summary>
+        /// <param name="command">The command to run</param>
+        /// <param name="args">Arguments to give to the command</param>
+        public void RunCommand(ICommand command, object args)
+        {
+            var commandAndParams = Tuple.Create<object, object>(command, args);
+            CommandQueue.Enqueue(commandAndParams);
+            ProcessCommandQueue();
+        }
+
         private void Hooks_DispatcherInactive(object sender, EventArgs e)
         {
             ProcessCommandQueue();
         }
-*/
+
 
         /// <summary>
         ///     Run all of the commands in the CommandQueue
@@ -256,23 +299,23 @@ namespace Dynamo
             //We are now considered running
             Running = true;
 
-            //Set run auto flag
-            //this.DynamicRunEnabled = !showErrors;
+            if (!testing)
+            {
+                //Setup background worker
+                var worker = new BackgroundWorker();
+                worker.DoWork += EvaluationThread;
 
-            //Setup background worker
-            var worker = new BackgroundWorker();
-            worker.DoWork += EvaluationThread;
+                DynamoViewModel.RunEnabled = false;
 
-            //Disable Run Button
-
-            //dynSettings.Bench.Dispatcher.Invoke(new Action(
-            //   delegate { dynSettings.Bench.RunButton.IsEnabled = false; }
-            //));
-
-            DynamoViewModel.RunEnabled = false;
-
-            //Let's start
-            worker.RunWorkerAsync();
+                //Let's start
+                worker.RunWorkerAsync();
+            }
+            else
+                //for testing, we do not want to run
+                //asynchronously, as it will finish the 
+                //test before the evaluation (and the run)
+                //is complete
+                EvaluationThread(null, null);
         }
 
         public delegate void RunCompletedHandler(object controller, bool success);
@@ -285,9 +328,6 @@ namespace Dynamo
         
         protected virtual void EvaluationThread(object s, DoWorkEventArgs args)
         {
-            /* Execution Thread */
-            DynamoLogger.Instance.Log("******EVALUATION THREAD START*******");
-
             //Get our entry points (elements with nothing connected to output)
             List<dynNodeModel> topElements = DynamoViewModel.Model.HomeSpace.GetTopMostNodes().ToList();
 
@@ -299,7 +339,7 @@ namespace Dynamo
             try
             {
                 var typeDict = new Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>>();
-                FSharpMap<dynSymbol, TypeScheme> typeEnv = MapModule.Empty<dynSymbol, TypeScheme>();
+                FSharpMap<string, TypeScheme> typeEnv = MapModule.Empty<string, TypeScheme>();
 
                 foreach (dynNodeModel node in topElements)
                 {
@@ -360,18 +400,13 @@ namespace Dynamo
                 RunCancelled = true;
 
                 OnRunCompleted(this, false);
+
+                if (Testing)
+                    Assert.Fail(ex.Message);
             }
             finally
             {
                 /* Post-evaluation cleanup */
-
-                //Re-enable run button
-                //dynSettings.Bench.Dispatcher.Invoke(new Action(
-                //   delegate
-                //   {
-                //       dynSettings.Bench.RunButton.IsEnabled = true;
-                //   }
-                //));
 
                 DynamoViewModel.RunEnabled = true;
 
@@ -399,8 +434,6 @@ namespace Dynamo
                     OnRunCompleted(this, true);
                 }
             }
-
-            DynamoLogger.Instance.Log("******EVALUATION THREAD END*******");
         }
 
         protected internal virtual void Run(IEnumerable<dynNodeModel> topElements, FScheme.Expression runningExpression)
@@ -410,13 +443,11 @@ namespace Dynamo
             {
                 if (dynSettings.Bench != null)
                 {
-                    //string exp = FScheme.print(runningExpression);
-                    dynSettings.Bench.Dispatcher.Invoke(new Action(
-                        () =>
-                        {
-                            foreach (string exp in topElements.Select(node => node.PrintExpression()))
-                                dynSettings.Controller.DynamoViewModel.Log("> " + exp);
-                        }));
+                    foreach (dynNodeModel node in topElements)
+                    {
+                        string exp = node.PrintExpression();
+                        dynSettings.Controller.DynamoViewModel.Log("> " + exp);
+                    }
                 }
             }
 
@@ -432,8 +463,7 @@ namespace Dynamo
                     //Print some more stuff if we're in debug mode
                     if (DynamoViewModel.RunInDebug && expr != null)
                     {
-                        dynSettings.Bench.Dispatcher.Invoke(new Action(
-                            () => dynSettings.Controller.DynamoViewModel.Log(FScheme.print(expr))));
+                        dynSettings.Controller.DynamoViewModel.Log(FScheme.print(expr));
                     }
                 }
             }
@@ -463,6 +493,12 @@ namespace Dynamo
                 OnRunCancelled(true);
                 RunCancelled = true;
                 _runAgain = false;
+
+                //If we are testing, we need to throw an exception here
+                //which will, in turn, throw an Assert.Fail in the 
+                //Evaluation thread.
+                if (Testing)
+                    throw new Exception(ex.Message);
             }
 
             OnEvaluationCompleted();

@@ -95,6 +95,24 @@ namespace Dynamo.Utilities
         }
 
         /// <summary>
+        ///     Import a dyf file for eventual initialization
+        /// </summary>
+        /// <returns>False if we failed to get data from the path, otherwise true</returns>
+        public bool AddFileToPath(string file)
+        {
+            Guid guid;
+            string name;
+            string category;
+            if (!GetHeaderFromPath(file, out guid, out name, out category))
+            {
+                return false;
+            }
+
+            this.SetNodeInfo(name, category, guid, file);
+            return true;
+        }
+
+        /// <summary>
         ///     Enumerates all of the files in the search path and get's their guids.
         ///     Does not instantiate the nodes.
         /// </summary>
@@ -106,11 +124,7 @@ namespace Dynamo.Utilities
 
             foreach (string file in Directory.EnumerateFiles(SearchPath, "*.dyf"))
             {
-                Guid guid;
-                string name;
-                string category;
-                if (GetHeaderFromPath(file, out guid, out name, out category))
-                    SetNodeInfo(name, category, guid, file);
+                AddFileToPath(file);
             }
 
             return true;
@@ -300,10 +314,8 @@ namespace Dynamo.Utilities
                 outputs = topMost.Select(x => x.Item2.OutPortData[x.Item1].NickName);
             }
 
-            result = new dynFunction(inputs, outputs, def)
-            {
-                NickName = ws.Name
-            };
+            result = controller.DynamoViewModel.CreateFunction(inputs, outputs, def);
+            result.NickName = ws.Name;
 
             return true;
         }
@@ -766,8 +778,8 @@ namespace Dynamo.Utilities
 
             INode top;
             var buildDict = new Dictionary<dynNodeModel, Dictionary<int, INode>>();
-            FSharpMap<dynSymbol, TypeScheme> typeEnv =
-                MapModule.OfSeq(variables.Select(x => Tuple.Create(x, TypeScheme.Empty())));
+            FSharpMap<string, TypeScheme> typeEnv =
+                MapModule.OfSeq(variables.Select(x => Tuple.Create(x.GUID.ToString(), TypeScheme.Empty())));
             var typeDict = new Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>>();
             var outTypes = new List<IDynamoType>();
 
@@ -830,7 +842,7 @@ namespace Dynamo.Utilities
             }
 
             definition.OutputTypes = outTypes;
-            definition.InputTypes = variables.Select(x => typeEnv[x].Type).ToList();
+            definition.InputTypes = variables.Select(x => typeEnv[x.GUID.ToString()].Type).ToList();
 
             // make the anonymous function
             FScheme.Expression expression = Utils.MakeAnon(

@@ -123,26 +123,32 @@ namespace Dynamo.Nodes
 
             e.EvaluateFunction += delegate(string name, FunctionArgs args)
             {
-                if (paramSet.Contains(name) || ReservedNames.Contains(name))
-                    return;
+                if (!paramSet.Contains(name) && !ReservedNames.Contains(name))
+                {
 
-                paramSet.Add(name);
+                    paramSet.Add(name);
 
-                IEnumerable<IDynamoType> inputs = args.Parameters.Select(x => new GuessType() as IDynamoType);
+                    IEnumerable<IDynamoType> inputs =
+                        args.Parameters.Select(_ => new GuessType() as IDynamoType);
 
-                parameters.Add(
-                    Formula.IndexOf(name, StringComparison.Ordinal), 
-                    Tuple.Create(name, new FunctionType(inputs, new NumberType()) as IDynamoType));
+                    parameters.Add(
+                        Formula.IndexOf(name, StringComparison.Ordinal),
+                        Tuple.Create(
+                            name, new FunctionType(inputs, new NumberType()) as IDynamoType));
+                }
 
                 foreach (var p in args.Parameters)
                 {
                     p.Evaluate();
                 }
+
                 args.Result = 0;
             };
 
             e.EvaluateParameter += delegate(string name, ParameterArgs args)
             {
+                args.Result = 0;
+
                 if (paramSet.Contains(name))
                     return;
 
@@ -150,7 +156,6 @@ namespace Dynamo.Nodes
                 parameters.Add(
                     Formula.IndexOf(name, StringComparison.Ordinal), 
                     Tuple.Create(name, new NumberType() as IDynamoType));
-                args.Result = 0;
             };
 
             try
@@ -193,6 +198,10 @@ namespace Dynamo.Nodes
                         Utils.SequenceToFSharpList(
                             fArgs.Parameters.Select(
                                 p => Value.NewNumber(Convert.ToDouble(p.Evaluate())))))).Item;
+                }
+                else
+                {
+                    fArgs.HasResult = false;
                 }
             };
 

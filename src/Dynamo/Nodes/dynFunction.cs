@@ -25,8 +25,7 @@ namespace Dynamo
         {
             private FunctionDefinition _def;
 
-            public dynFunction(
-                IEnumerable<string> inputs, IEnumerable<string> outputs, FunctionDefinition def)
+            protected internal dynFunction(IEnumerable<string> inputs, IEnumerable<string> outputs, FunctionDefinition def)
                 : base(def.FunctionId.ToString())
             {
                 _def = def;
@@ -261,7 +260,29 @@ namespace Dynamo
                 }
 
                 RegisterAllPorts();
+
+                //argument lacing on functions should be set to disabled
+                //by default in the constructor, but for any workflow saved
+                //before this was the case, we need to ensure it here.
+                ArgumentLacing = LacingStrategy.Disabled;
+
+                // we've found a custom node, we need to attempt to load its guid.  
+                // if it doesn't exist (i.e. its a legacy node), we need to assign it one,
+                // deterministically
+                Guid funId;
+                try
+                {
+                    funId = Guid.Parse(Symbol);
+                }
+                catch
+                {
+                    funId = GuidUtility.Create(GuidUtility.UrlNamespace, elNode.Attributes["nickname"].Value);
+                    Symbol = funId.ToString();
+                }
+
+                Definition = dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
             }
+
         }
 
         [NodeName("Output")]
@@ -386,10 +407,10 @@ namespace Dynamo
             }
 
             internal override IDynamoType TypeCheck(
-                int port, FSharpMap<dynSymbol, TypeScheme> env,
+                int port, FSharpMap<string, TypeScheme> env,
                 Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
             {
-                IDynamoType result = env[this].Instantiate();
+                IDynamoType result = env[GUID.ToString()].Instantiate();
                 typeDict[this] = Tuple.Create(
                     new List<IDynamoType>(), new List<IDynamoType> { result });
                 return result;
@@ -516,12 +537,12 @@ namespace Dynamo
         private IEnumerable<FunctionDefinition> findAllDependencies(
             HashSet<FunctionDefinition> dependencySet)
         {
-            IEnumerable<FunctionDefinition> query = Workspace.Nodes
-                                                             .OfType<dynFunction>()
-                                                             .Select(node => node.Definition)
-                                                             .Where(
-                                                                 def => !dependencySet.Contains(def));
-
+            IEnumerable<FunctionDefinition> query =
+                Workspace.Nodes
+                         .OfType<dynFunction>()
+                         .Select(node => node.Definition)
+                         .Where(
+                             def => !dependencySet.Contains(def));
             foreach (FunctionDefinition definition in query)
             {
                 yield return definition;

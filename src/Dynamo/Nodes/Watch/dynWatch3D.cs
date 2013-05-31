@@ -25,6 +25,7 @@ using Dynamo.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Controls;
+using Dynamo.Utilities;
 
 namespace Dynamo.Nodes
 {
@@ -128,10 +129,27 @@ namespace Dynamo.Nodes
                 dynNodeModel node = pair.Value.Item2;
                 var drawable = node as IDrawable;
 
-                if (drawable != null)
+                if (node.IsVisible && drawable != null)
                     drawables.Add(drawable);
 
-                GetUpstreamIDrawable(drawables, node.Inputs);
+                if (node.IsUpstreamVisible)
+                    GetUpstreamIDrawable(drawables, node.Inputs);
+                else
+                    continue; // don't bother checking if function
+
+                //if the node is function then get all the 
+                //drawables inside that node. only do this if the
+                //node's workspace is the home space to avoid infinite
+                //recursion in the case of custom nodes in custom nodes
+                if (node is dynFunction && node.WorkSpace == dynSettings.Controller.DynamoModel.HomeSpace)
+                {
+                    dynFunction func = (dynFunction)node;
+                    IEnumerable<dynNodeModel> topElements = func.Definition.Workspace.GetTopMostNodes();
+                    foreach (dynNodeModel innerNode in topElements)
+                    {
+                        GetUpstreamIDrawable(drawables, innerNode.Inputs);
+                    }
+                }
             }
         }
 
@@ -159,19 +177,21 @@ namespace Dynamo.Nodes
 
             GetUpstreamIDrawable(drawables, Inputs);
 
-            foreach (RenderDescription rd in drawables.Select(d => d.Draw())) 
+            foreach (IDrawable d in drawables) 
             {
-                foreach (Point3D p in rd.points)
+                d.Draw();
+
+                foreach (Point3D p in d.RenderDescription.points)
                 {
                     Points.Add(p);
                 }
 
-                foreach (Point3D p in rd.lines)
+                foreach (Point3D p in d.RenderDescription.lines)
                 {
                     Lines.Add(p);
                 }
 
-                foreach (Mesh3D mesh in rd.meshes)
+                foreach (Mesh3D mesh in d.RenderDescription.meshes)
                 {
                     Meshes.Add(mesh);
                 }

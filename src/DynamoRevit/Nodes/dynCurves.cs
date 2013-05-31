@@ -15,6 +15,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Dynamo.Connectors;
@@ -23,6 +24,7 @@ using Microsoft.FSharp.Collections;
 using Value = Dynamo.FScheme.Value;
 using Dynamo.FSchemeInterop;
 using Dynamo.Revit;
+using System.Reflection;
 
 namespace Dynamo.Nodes
 {
@@ -32,6 +34,75 @@ namespace Dynamo.Nodes
     public class dynModelCurve : dynRevitTransactionNodeWithOneOutput
     {
         public dynModelCurve()
+        {
+            InPortData.Add(new PortData("c", "A Geometric Curve.", typeof(Value.Container)));
+            InPortData.Add(new PortData("sp", "The Sketch Plane.", typeof(Value.Container)));
+            OutPortData.Add(new PortData("mc", "Model Curve", typeof(Value.Container)));
+
+            RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Curve c = (Curve)((Value.Container)args[0]).Item;
+            SketchPlane sp = (SketchPlane)((Value.Container)args[1]).Item;
+
+            
+            ModelCurve mc;
+            XYZ spOrigin = sp.Plane.Origin;
+            XYZ modelOrigin = XYZ.Zero;
+            Transform trf = Transform.get_Translation(spOrigin);
+            //trf =  trf.Multiply(Transform.get_Rotation(spOrigin,XYZ.BasisZ,spOrigin.AngleOnPlaneTo(XYZ.BasisY,spOrigin)));
+            //Curve ct = c.get_Transformed(trf);
+
+
+            // http://wikihelp.autodesk.com/Revit/enu/2013/Help/00006-API_Developer's_Guide/0074-Revit_Ge74/0114-Sketchin114/0117-ModelCur117
+            // The SetPlaneAndCurve() method and the Curve and SketchPlane property setters are used in different situations.
+            // When the new Curve lies in the same SketchPlane, or the new SketchPlane lies on the same planar face with the old SketchPlane, use the Curve or SketchPlane property setters.
+            // If new Curve does not lay in the same SketchPlane, or the new SketchPlane does not lay on the same planar face with the old SketchPlane, you must simultaneously change the Curve value and the SketchPlane value using SetPlaneAndCurve() to avoid internal data inconsistency.
+
+
+            if (this.Elements.Any())
+            {
+                Element e;
+                if (dynUtils.TryGetElement(this.Elements[0], typeof(ModelCurve), out e))
+                {
+                    mc = e as ModelCurve;
+                    mc.SketchPlane = sp;
+                    var loc = mc.Location as LocationCurve;
+                    loc.Curve = c;
+
+                }
+                else
+                {
+                    mc = this.UIDocument.Document.IsFamilyDocument
+                       ? this.UIDocument.Document.FamilyCreate.NewModelCurve(c, sp)
+                       : this.UIDocument.Document.Create.NewModelCurve(c, sp);
+                    this.Elements[0] = mc.Id;
+                    mc.SketchPlane = sp;
+
+
+                }
+            }
+            else
+            {
+                mc = this.UIDocument.Document.IsFamilyDocument
+                   ? this.UIDocument.Document.FamilyCreate.NewModelCurve(c, sp)
+                   : this.UIDocument.Document.Create.NewModelCurve(c, sp);
+                this.Elements.Add(mc.Id);
+                mc.SketchPlane = sp;
+            }
+
+            return Value.NewContainer(mc);
+        }
+    }
+
+    [NodeName("Reference Curve")]
+    [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_CURVE)]
+    [NodeDescription("Creates a model curve.")]
+    public class dynReferenceCurve : dynRevitTransactionNodeWithOneOutput
+    {
+        public dynReferenceCurve()
         {
             InPortData.Add(new PortData("c", "A Geometric Curve.", typeof(Value.Container)));
             InPortData.Add(new PortData("sp", "The Sketch Plane.", typeof(Value.Container)));
@@ -63,7 +134,7 @@ namespace Dynamo.Nodes
             if (this.Elements.Any())
             {
                 Element e;
-                if (dynUtils.TryGetElement(this.Elements[0], out e))
+                if (dynUtils.TryGetElement(this.Elements[0],typeof(ModelCurve), out e))
                 {
                     mc = e as ModelCurve;
                     mc.SketchPlane = sp;
@@ -90,6 +161,8 @@ namespace Dynamo.Nodes
                 this.Elements.Add(mc.Id);
                 mc.SketchPlane = sp;
             }
+
+            mc.ChangeToReferenceLine();
 
             return Value.NewContainer(mc);
         }
@@ -130,7 +203,7 @@ namespace Dynamo.Nodes
             if (this.Elements.Any())
             {
                 Element e;
-                if (dynUtils.TryGetElement(this.Elements[0], out e))
+                if (dynUtils.TryGetElement(this.Elements[0],typeof(CurveByPoints), out e))
                 {
                     c = e as CurveByPoints;
                     c.SetPoints(refPtArr);
@@ -210,7 +283,7 @@ namespace Dynamo.Nodes
                           {
                               Element e;
                               //...we attempt to fetch it from the document...
-                              if (dynUtils.TryGetElement(this.Elements[count], out e))
+                              if (dynUtils.TryGetElement(this.Elements[count],typeof(CurveByPoints), out e))
                               {
                                   //...and if we're successful, update it's position... 
                                   c = e as CurveByPoints;
@@ -276,7 +349,7 @@ namespace Dynamo.Nodes
                 {
                     Element e;
                     //...try to get the first one...
-                    if (dynUtils.TryGetElement(this.Elements[0], out e))
+                    if (dynUtils.TryGetElement(this.Elements[0],typeof(CurveByPoints), out e))
                     {
                         //..and if we do, update it's position.
                         c = e as CurveByPoints;
@@ -432,9 +505,9 @@ namespace Dynamo.Nodes
 
     }
 
-    [NodeName("Planar Nurb Spline")]
+    [NodeName("Nurbs Spline Model Curve")]
     [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_CURVE)]
-    [NodeDescription("Node to create a planar model curve.")]
+    [NodeDescription("Node to create a planar nurbs spline model curve.")]
     public class dynModelCurveNurbSpline : dynRevitTransactionNodeWithOneOutput
     {
         public dynModelCurveNurbSpline()
@@ -462,7 +535,7 @@ namespace Dynamo.Nodes
             ModelNurbSpline c;
             Element e;
 
-            if (Elements.Any() && dynUtils.TryGetElement(Elements[0], out e))
+            if (Elements.Any() && dynUtils.TryGetElement(Elements[0],typeof(ModelCurve), out e))
             {
                 c = e as ModelNurbSpline;
 
@@ -492,6 +565,342 @@ namespace Dynamo.Nodes
             }
 
             return Value.NewContainer(c);
+        }
+    }
+
+    [NodeName("Nurbs Spline")]
+    [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_CURVE)]
+    [NodeDescription("Node to create a planar nurbs spline curve.")]
+    public class dynGeometryCurveNurbSpline : dynCurveBase
+    {
+        public dynGeometryCurveNurbSpline()
+        {
+            InPortData.Add(new PortData("xyzs", "The xyzs from which to create the nurbs curve", typeof(Value.List)));
+            OutPortData.Add(new PortData("cv", "The nurbs spline curve created by this operation.", typeof(Value.Container)));
+
+            RegisterAllPorts();
+        }
+
+         public override Value Evaluate(FSharpList<Value> args)
+        {
+            var pts = ((Value.List)args[0]).Item.Select(
+               x => ((XYZ)((Value.Container)x).Item)).ToList();
+
+            if (pts.Count <= 1)
+            {
+                throw new Exception("Not enough reference points to make a curve.");
+            }
+
+            var ns = dynRevitSettings.Revit.Application.Create.NewNurbSpline(
+                    pts, Enumerable.Repeat(1.0, pts.Count).ToList());
+
+            crvs.Add(ns);
+            
+            return Value.NewContainer(ns);
+        }
+    }
+
+    [NodeName("Offset Curve")]
+    [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_CURVE)]
+    [NodeDescription("Create an offset curve from a given curve.")]
+    public class dynOffsetCurve : dynCurveBase
+    {
+        public dynOffsetCurve()
+        {
+            InPortData.Add(new PortData("crv", "The curve to offset.", typeof(Value.Container)));
+            InPortData.Add(new PortData("d", "The distance to offset.", typeof(Value.Number)));
+            OutPortData.Add(new PortData("crv", "The offset curve.", typeof(Value.Container)));
+            RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Curve cIn = (Curve)((Value.Container)args[0]).Item;
+            double dIn = ((Value.Number)args[1]).Item;
+
+            Curve cOut = null;
+
+            if(cIn is Arc)
+            {
+                Arc a = cIn as Arc;
+
+                Transform tStart = cIn.ComputeDerivatives(0, true);
+                Transform tEnd = cIn.ComputeDerivatives(1, true);
+                Transform tMid = cIn.ComputeDerivatives(.5, true);
+
+                XYZ startVec = tStart.BasisX.CrossProduct(tStart.BasisZ).Normalize();
+                XYZ endVec = tEnd.BasisX.CrossProduct(tEnd.BasisZ).Normalize();
+                XYZ midVec = tMid.BasisX.CrossProduct(tMid.BasisZ).Normalize();
+
+                XYZ start = a.Evaluate(0, true) + startVec*dIn;
+                XYZ end = a.Evaluate(1,true) + endVec*dIn;
+                XYZ mid = a.Evaluate(.5,true) + midVec*dIn;
+
+                cOut = dynRevitSettings.Revit.Application.Create.NewArc(start, end, mid);
+            }
+            else if (cIn is CylindricalHelix)
+            {
+                CylindricalHelix ch = cIn as CylindricalHelix;
+
+                cOut = CylindricalHelix.Create(ch.BasePoint, ch.Radius + dIn, ch.XVector, ch.ZVector, ch.Pitch, 0, Math.PI * 2);
+            }
+            else if (cIn is Ellipse)
+            {
+                Ellipse e = cIn as Ellipse;
+                cOut = dynRevitSettings.Revit.Application.Create.NewEllipse(e.Center, e.RadiusX+dIn, e.RadiusY+dIn, e.XDirection, e.YDirection, 0, Math.PI*2);
+            }
+            else if (cIn is HermiteSpline)
+            {
+                List<XYZ> newCtrlPoints = new List<XYZ>();
+                HermiteSpline hs = cIn as HermiteSpline;
+
+                double tStart = hs.get_EndParameter(0);
+                double tEnd = hs.get_EndParameter(1);
+
+                List<XYZ> newPts = new List<XYZ>();
+                double domain = tEnd - tStart;
+
+                for (double i = tStart; i <= tEnd; i += domain / 20)
+                {
+                    Transform t = hs.ComputeDerivatives(i, false);
+
+                    XYZ curveNormal = t.BasisX.CrossProduct(t.BasisZ).Normalize();
+
+                    if (t.BasisY.Normalize().GetLength() == 0)
+                        continue;
+
+                    double dot = t.BasisY.Normalize().DotProduct(curveNormal);
+                    if (dot > 0)
+                    {
+                        newPts.Add(t.Origin + curveNormal * dIn);
+                    }
+                    else
+                        newPts.Add(t.Origin + curveNormal * -dIn);
+
+                    Debug.WriteLine(string.Format("{0} : {1} : {2}", t.BasisY.Normalize(), newPts.Last(), dot));
+                }
+
+                cOut = dynRevitSettings.Revit.Application.Create.NewHermiteSpline(newPts, false);
+            }
+            else if (cIn is Line)
+            {
+                Line l = cIn as Line;
+                XYZ startVec = cIn.ComputeDerivatives(0, true).BasisZ.Normalize();
+                XYZ endVec = cIn.ComputeDerivatives(1, true).BasisZ.Normalize();
+                XYZ start = l.Evaluate(0, true) + startVec * dIn;
+                XYZ end = l.Evaluate(1, true) + endVec * dIn;
+
+                cOut = dynRevitSettings.Revit.Application.Create.NewLineBound(start, end);
+            }
+            else if (cIn is NurbSpline)
+            {
+                bool flip = false;
+                double lastMagnitude = 0.0;
+
+                List<XYZ> newCtrlPoints = new List<XYZ>();
+                NurbSpline ns = cIn as NurbSpline;
+
+                double tStart = ns.get_EndParameter(0);
+                double tEnd = ns.get_EndParameter(1);
+
+                List<XYZ> newPts = new List<XYZ>();
+                double domain = tEnd - tStart;
+
+                for (double i = tStart; i <= tEnd; i += domain / 20)
+                {
+                    Transform t = ns.ComputeDerivatives(i, false);
+
+                    XYZ curveNormal = t.BasisX.CrossProduct(t.BasisZ).Normalize();
+
+                    if (t.BasisY.Normalize().GetLength() == 0)
+                        continue;
+
+                    double deviation = t.BasisY.GetLength() - lastMagnitude;
+                    if(deviation < 0 + .0000001 && deviation > 0 - .0000001)
+                        continue;
+
+                    flip = deviation < 0;
+
+                    if (flip || i==tStart)
+                    {
+                        newPts.Add(t.Origin + curveNormal * dIn);
+                    }
+                    else
+                        newPts.Add(t.Origin + curveNormal * -dIn);
+
+                    Debug.WriteLine(string.Format("{0} : {1} : {2}", t.BasisY, newPts.Last(), t.BasisY.GetLength()));
+
+                    lastMagnitude = t.BasisY.GetLength();
+                }
+
+                cOut = dynRevitSettings.Revit.Application.Create.NewHermiteSpline(newPts, false);
+                
+            }
+
+            if (cOut != null)
+                crvs.Add(cOut);
+
+            return Value.NewContainer(cOut);
+        }
+    }
+
+    [NodeName("Bisector Line")]
+    [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_CURVE)]
+    [NodeDescription("Creates bisector of two lines")]
+    [DoNotLoadOnPlatforms(Context.REVIT_2013, Context.REVIT_2014, Context.VASARI_2013)]
+    public class dynBisector : dynRevitTransactionNodeWithOneOutput
+    {
+        public dynBisector()
+        {
+            InPortData.Add(new PortData("line1", "First Line", typeof(Value.Container)));
+            InPortData.Add(new PortData("line2", "Second Line", typeof(Value.Container)));
+            OutPortData.Add(new PortData("bisector", "Bisector Line", typeof(Value.Container)));
+        }
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Line line1 = (Line)((Value.Container)args[0]).Item;
+            Line line2 = (Line)((Value.Container)args[1]).Item;
+
+            Type LineType = typeof(Autodesk.Revit.DB.Line);
+
+            MethodInfo[] lineInstanceMethods = LineType.GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+
+            String nameOfMethodCreateBisector = "CreateBisector";
+            Line result = null;
+
+            foreach (MethodInfo m in lineInstanceMethods)
+            {
+                if (m.Name == nameOfMethodCreateBisector)
+                {
+                    object[] argsM = new object[1];
+                    argsM[0] = line2;
+
+                    result = (Line)m.Invoke(line1, argsM);
+
+                    break;
+                }
+            }
+
+            return Value.NewContainer(result);
+        }
+    }
+
+    [NodeName("Best fit arc")]
+    [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_CURVE)]
+    [NodeDescription("Creates best fit arc through points")]
+    [DoNotLoadOnPlatforms(Context.REVIT_2013, Context.REVIT_2014, Context.VASARI_2013)]
+    public class dynBestFitArc : dynRevitTransactionNodeWithOneOutput
+    {
+        public dynBestFitArc()
+        {
+            InPortData.Add(new PortData("points", "Points to Fit Arc Through", typeof(Value.List)));
+            OutPortData.Add(new PortData("arc", "Best Fit Arc", typeof(Value.Container)));
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            List<XYZ> xyzList = new List<XYZ>();
+
+            FSharpList<Value> vals = ((Value.List)args[0]).Item;
+            var doc = dynRevitSettings.Doc;
+
+            for (int ii = 0; ii < vals.Count(); ii++)
+            {
+                var item = ((Value.Container)vals[ii]).Item;
+
+                if (item is ReferencePoint)
+                {
+                    ReferencePoint refPoint = (ReferencePoint)item;
+                    XYZ thisXYZ = refPoint.GetCoordinateSystem().Origin;
+                    xyzList.Add(thisXYZ);
+                }
+                else if (item is XYZ)
+                {
+                    XYZ thisXYZ = (XYZ)item;
+                    xyzList.Add(thisXYZ);
+                }
+            }
+
+            if (xyzList.Count <= 1)
+            {
+                throw new Exception("Not enough reference points to make a curve.");
+            }
+
+
+            Type ArcType = typeof(Autodesk.Revit.DB.Arc);
+
+            MethodInfo[] arcStaticMethods = ArcType.GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
+
+            String nameOfMethodCreateByFit = "CreateByFit";
+            Arc result = null;
+
+            foreach (MethodInfo m in arcStaticMethods)
+            {
+                if (m.Name == nameOfMethodCreateByFit)
+                {
+                    object[] argsM = new object[1];
+                    argsM[0] = xyzList;
+
+                    result = (Arc)m.Invoke(null, argsM);
+
+                    break;
+                }
+            }
+
+            return Value.NewContainer(result);
+        }
+    }
+
+    [NodeName("Approximate By Tangent Arcs")]
+    [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_CURVE)]
+    [NodeDescription("Creates best fit arc through points")]
+    [DoNotLoadOnPlatforms(Context.REVIT_2013, Context.REVIT_2014, Context.VASARI_2013)]
+    public class dynApproximateByTangentArcs : dynRevitTransactionNodeWithOneOutput
+    {
+        public dynApproximateByTangentArcs()
+        {
+            InPortData.Add(new PortData("curve", "Curve to Approximate by Tangent Arcs", typeof(Value.Container)));
+            OutPortData.Add(new PortData("arcs", "List of Approximating Arcs", typeof(Value.List)));
+
+            RegisterAllPorts();
+        }
+
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            Curve thisCurve = (Curve)((Value.Container)args[0]).Item;
+
+            if (thisCurve == null)
+            {
+                throw new Exception("Not enough reference points to make a curve.");
+            }
+
+
+            Type CurveType = typeof(Autodesk.Revit.DB.Curve);
+
+            MethodInfo[] curveInstanceMethods = CurveType.GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+
+            String nameOfMethodApproximateByTangentArcs = "ApproximateByTangentArcs";
+            List <Curve> resultArcs = null;
+            var result = FSharpList<Value>.Empty;
+
+            foreach (MethodInfo m in curveInstanceMethods)
+            {
+                if (m.Name == nameOfMethodApproximateByTangentArcs)
+                {
+                    object[] argsM = new object[0];
+
+                    resultArcs = (List<Curve>)m.Invoke(thisCurve, argsM);
+
+                    break;
+                }
+            }
+            for (int indexCurve = resultArcs.Count - 1; indexCurve > -1; indexCurve--)
+            {
+                result = FSharpList<Value>.Cons(Value.NewContainer(resultArcs[indexCurve]), result);   
+            }
+
+            return Value.NewList(result);
         }
     }
 }

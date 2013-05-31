@@ -32,6 +32,7 @@ using MenuItem = System.Windows.Controls.MenuItem;
 using Panel = System.Windows.Controls.Panel;
 using RadioButton = System.Windows.Controls.RadioButton;
 using TextBox = System.Windows.Controls.TextBox;
+using Value = Dynamo.FScheme.Value;
 
 namespace Dynamo.Nodes
 {
@@ -479,6 +480,7 @@ namespace Dynamo.Nodes
             OutPortData.Add(new PortData("combined", "Combined lists", new ListType(_outType)));
 
             RegisterAllPorts();
+            ArgumentLacing = LacingStrategy.Disabled;
         }
 
         protected override IDynamoType GetInputType(int index)
@@ -1606,7 +1608,7 @@ namespace Dynamo.Nodes
             RegisterAllPorts();
         }
 
-        internal override IDynamoType TypeCheck(int port, FSharpMap<dynSymbol, TypeScheme> env, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        internal override IDynamoType TypeCheck(int port, FSharpMap<string, TypeScheme> env, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
         {
             if (!Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
@@ -1689,19 +1691,13 @@ namespace Dynamo.Nodes
         {
             FScheme.Value result = args[0];
 
-            Bench.Dispatcher.Invoke(new Action(
-                                        () => Controller.DynamoViewModel.Log(FScheme.print(result))));
+            Controller.DynamoViewModel.Log(FScheme.print(result));
 
             if (Controller.DynamoViewModel.RunInDebug)
             {
-                _button.Dispatcher.Invoke(new Action(
-                                             delegate
-                                             {
-                                                 enabled = true;
-                                                 Select();
-                                                 Controller.DynamoViewModel.ShowElement(this);
-                                             }
-                                             ));
+                enabled = true;
+                Select();
+                Controller.DynamoViewModel.ShowElement(this);
 
                 while (enabled)
                     Thread.Sleep(1);
@@ -2031,7 +2027,6 @@ namespace Dynamo.Nodes
         public dynDoubleInput()
         {
             RegisterAllPorts();
-            Value = 0.0;
         }
 
         public override void SetupCustomUIElements(dynNodeView nodeUI)
@@ -2055,6 +2050,8 @@ namespace Dynamo.Nodes
                 UpdateSourceTrigger = UpdateSourceTrigger.Explicit
             };
             tb.SetBinding(TextBox.TextProperty, bindingVal);
+
+            tb.Text = "0.0";
 
             nodeUI.inputGrid.Children.Add(tb);
             Grid.SetColumn(tb, 0);
@@ -2675,6 +2672,25 @@ namespace Dynamo.Nodes
             InPortData.Add(new PortData("n", "A number", new NumberType()));
             OutPortData.Add(new PortData("s", "A string", new StringType()));
             RegisterAllPorts();
+        }
+    }
+
+    [NodeName("String Length")]
+    [NodeDescription("Calculates the length of a string.")]
+    [NodeCategory(BuiltinNodeCategories.CORE_STRINGS)]
+    public class dynStringLen : dynNodeWithOneOutput
+    {
+        public dynStringLen()
+        {
+            InPortData.Add(new PortData("s", "A string", new StringType()));
+            OutPortData.Add(new PortData("len(s)", "Length of given string", new NumberType()));
+
+            RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            return Value.NewNumber(((Value.String)args[0]).Item.Length);
         }
     }
 

@@ -14,6 +14,7 @@ using Dynamo.TypeSystem;
 using Dynamo.Utilities;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
+using Value = Dynamo.FScheme.Value;
 
 namespace Dynamo.Nodes
 {
@@ -100,6 +101,10 @@ namespace Dynamo.Nodes
         public ObservableCollection<PortData> InPortData { get; private set; }
         public ObservableCollection<PortData> OutPortData { get; private set; }
         //bool isSelected = false;
+        private bool _isCustomFunction = false;
+        private bool interactionEnabled = true;
+        private bool _isVisible;
+        private bool _isUpstreamVisible;
 
         /// <summary>
         /// Returns whether this node represents a built-in or custom function.
@@ -107,6 +112,34 @@ namespace Dynamo.Nodes
         public bool IsCustomFunction
         {
             get { return GetType().IsAssignableFrom(typeof(dynFunction)); }
+        }
+
+        public bool IsVisible
+        {
+            get 
+            {
+                return _isVisible;
+            }
+            set
+            {
+                _isVisible = value;
+                isDirty = true;
+                RaisePropertyChanged("IsVisible");
+            }
+        }
+
+        public bool IsUpstreamVisible
+        {
+            get 
+            {
+                return _isUpstreamVisible;
+            }
+            set
+            {
+                _isUpstreamVisible = value;
+                isDirty = true;
+                RaisePropertyChanged("IsUpstreamVisible");
+            }
         }
 
         public ElementState State
@@ -328,6 +361,9 @@ namespace Dynamo.Nodes
             InPortData = new ObservableCollection<PortData>();
             OutPortData = new ObservableCollection<PortData>();
 
+            IsVisible = true;
+            IsUpstreamVisible = true;
+
             //Fetch the element name from the custom attribute.
             object[] nameArray = GetType().GetCustomAttributes(typeof(NodeNameAttribute), true);
 
@@ -426,7 +462,7 @@ namespace Dynamo.Nodes
         }
 
         internal virtual IDynamoType TypeCheck(
-            int port, FSharpMap<dynSymbol, TypeScheme> env,
+            int port, FSharpMap<string, TypeScheme> env,
             Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
         {
             if (Enumerable.Range(0, InPortData.Count).All(HasInput))
@@ -750,24 +786,21 @@ namespace Dynamo.Nodes
                 }
                 catch (Exception ex)
                 {
-                    Bench.Dispatcher.Invoke(
-                        new Action(
-                            delegate
-                            {
-                                Debug.WriteLine(ex.Message + " : " + ex.StackTrace);
-                                dynSettings.Controller.DynamoViewModel.Log(ex);
+                    Debug.WriteLine(ex.Message + " : " + ex.StackTrace);
+                    dynSettings.Controller.DynamoViewModel.Log(ex);
 
-                                if (DynamoCommands.WriteToLogCmd.CanExecute(null))
-                                {
-                                    DynamoCommands.WriteToLogCmd.Execute(ex.Message);
-                                    DynamoCommands.WriteToLogCmd.Execute(ex.StackTrace);
-                                }
+                    if (DynamoCommands.WriteToLogCmd.CanExecute(null))
+                    {
+                        DynamoCommands.WriteToLogCmd.Execute(ex.Message);
+                        DynamoCommands.WriteToLogCmd.Execute(ex.StackTrace);
+                    }
 
-                                Controller.DynamoViewModel.ShowElement(this);
-                            }
-                            ));
+                    Controller.DynamoViewModel.ShowElement(this);
 
                     Error(ex.Message);
+
+                    if (dynSettings.Controller.Testing)
+                        throw new Exception(ex.Message);
                 }
 
                 OnEvaluate();
@@ -777,13 +810,10 @@ namespace Dynamo.Nodes
                 return FSharpOption<FScheme.Value>.Some(expr);
             };
 
-//MVVM : Switched from nodeUI dispatcher to bench dispatcher 
             //C# doesn't have a Option type, so we'll just borrow F#'s instead.
-            FSharpOption<FScheme.Value> result = isInteractive && dynSettings.Bench != null
-                                                     ? (FSharpOption<FScheme.Value>)
-                                                       dynSettings.Bench.Dispatcher.Invoke(
-                                                           evaluation)
-                                                     : evaluation();
+            FSharpOption<Value> result = isInteractive && dynSettings.Controller.UIDispatcher != null
+                ? (FSharpOption<Value>)dynSettings.Controller.UIDispatcher.Invoke(evaluation)
+                : evaluation();
 
             if (Equals(result, FSharpOption<FScheme.Value>.None))
                 throw new CancelEvaluationException(false);
@@ -798,15 +828,6 @@ namespace Dynamo.Nodes
             FSharpList<FScheme.Value> args,
             Dictionary<PortData, FScheme.Value> outPuts)
         {
-            List<string> argList = args.Select(x => x.ToString()).ToList();
-            List<string> outPutsList = outPuts.Keys.Select(x => x.NickName).ToList();
-
-            Debug.WriteLine(
-                string.Format(
-                    "__eval_internal : {0} : {1}",
-                    string.Join(",", argList),
-                    string.Join(",", outPutsList)));
-
             Evaluate(args, outPuts);
         }
 
@@ -1391,11 +1412,11 @@ namespace Dynamo.Nodes
 
     public class UIDispatcherEventArgs : EventArgs
     {
+        public Action ActionToDispatch { get; set; }
+        public List<object> Parameters { get; set; }
         public UIDispatcherEventArgs(Action a)
         {
             ActionToDispatch = a;
         }
-
-        public Action ActionToDispatch { get; set; }
     }
 }

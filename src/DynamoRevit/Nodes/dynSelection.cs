@@ -80,8 +80,11 @@ namespace Dynamo.Nodes
 
             tb = new TextBox();
             //tb.Text = "Nothing Selected";
-            SelectionText = "Nothing Selected";
-            SelectButtonContent = "Select Instance";
+            if (this.SelectedElement == null || SelectionText.Count() < 1 || SelectButtonContent.Count() < 1 )
+            {
+                SelectionText = "Nothing Selected";
+                SelectButtonContent = "Select Instance";
+            }
 
             tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
             tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
@@ -188,7 +191,44 @@ namespace Dynamo.Nodes
         public override Value Evaluate(FSharpList<Value> args)
         {
             if (this.SelectedElement == null)
-                throw new Exception("Nothing selected.");
+            {
+                //if (dynSettings.Controller.Testing)
+                //{
+                //    //if we're in test mode
+                //    //try to pass out an object of the right type
+                //    if (this is dynCurvesBySelection)
+                //    {
+                //        FilteredElementCollector fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
+                //        fec.OfClass(typeof(CurveElement));
+
+                //        if (fec.ToElements().Any())
+                //        {
+                //            //attempt to find elements that have not yet been selected
+                //            //this is important for things like lofts where you cannot have
+                //            //an element be the input for two parts of the form
+                //            var curveBySelectionNodes = dynSettings.Controller.DynamoModel.Nodes
+                //                .Where(x => (x is dynCurvesBySelection) && (x as dynCurvesBySelection).SelectedElement != null);
+                //            var previouslySelectedElements = curveBySelectionNodes
+                //                .Select(x => (x as dynCurvesBySelection).SelectedElement);
+                //            foreach (Element e in fec.ToElements())
+                //            {
+                //                if (e is ModelCurve)
+                //                {
+                //                    if (!previouslySelectedElements.Contains(e))
+                //                    {
+                //                        this.SelectedElement = e;
+                //                        break;
+                //                    }
+                //                }
+                //            }
+                //        }
+                //        else
+                //            throw new Exception("Suitable curve could not be found for testing.");
+                //    }
+                //}
+                //else
+                    throw new Exception("Nothing selected.");
+            }
 
             return Value.NewContainer(this.SelectedElement);
         }
@@ -214,7 +254,7 @@ namespace Dynamo.Nodes
                     var id = new ElementId(Convert.ToInt32(subNode.Attributes[0].Value));
                     try
                     {
-                        saved = dynRevitSettings.Doc.Document.GetElement(id) as FamilyInstance;
+                        saved = dynRevitSettings.Doc.Document.GetElement(id) as Element; // FamilyInstance;
                     }
                     catch
                     {
@@ -271,8 +311,13 @@ namespace Dynamo.Nodes
 
             tb = new TextBox();
             //tb.Text = "Nothing Selected";
-            SelectionText = "Nothing Selected";
-            SelectButtonContent = "Select Instances";
+
+            if (this.SelectedElements == null || this.SelectedElements.Count() < 1 ||
+                SelectionText.Count() < 1 || SelectButtonContent.Count() < 1)
+            {
+                SelectionText = "Nothing Selected";
+                SelectButtonContent = "Select Instances";
+            }
 
             tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
             tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
@@ -424,12 +469,14 @@ namespace Dynamo.Nodes
                     var id = new ElementId(Convert.ToInt32(subNode.Attributes[0].Value));
                     try
                     {
-                        saved = dynRevitSettings.Doc.Document.GetElement(id) as FamilyInstance;
+                        saved = dynRevitSettings.Doc.Document.GetElement(id) as Element;
                     }
                     catch
                     {
                         dynSettings.Controller.DynamoViewModel.Log("Unable to find element with ID: " + id.IntegerValue);
                     }
+                    if (this.SelectedElements == null)
+                        this.SelectedElements = new List<Element>();
                     this.SelectedElements.Add(saved);
                 }
             }
@@ -647,9 +694,11 @@ namespace Dynamo.Nodes
     {
         Reference f;
 
+        public RenderDescription RenderDescription { get; set; }
+
         public dynFormElementBySelection()
             : base(new PortData("face", "The face", typeof(Value.Container)))
-        { }
+        {}
 
         protected override void OnSelectClick()
         {
@@ -683,17 +732,35 @@ namespace Dynamo.Nodes
             }
         }
 
-        public RenderDescription Draw()
+        public void Draw()
         {
-            RenderDescription rd = new RenderDescription();
+            if (this.RenderDescription == null)
+                this.RenderDescription = new RenderDescription();
+            else
+                this.RenderDescription.ClearAll();
 
             Face face = (Face)dynRevitSettings.Doc.Document.GetElement(f).GetGeometryObjectFromReference(f);
 
-            dynRevitTransactionNode.DrawFace(rd, face);
+            dynRevitTransactionNode.DrawFace(this.RenderDescription, face);
 
-            return rd;
+        }
+        
+        public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
+        {
+
+            dynEl.SetAttribute("faceRef", this.f.ConvertToStableRepresentation( dynRevitSettings.Doc.Document));
         }
 
+        public override void LoadElement(XmlNode elNode)
+        {
+            try
+            {
+                this.f = Reference.ParseFromStableRepresentation(dynRevitSettings.Doc.Document, elNode.Attributes["faceRef"].Value.ToString());
+                if (f != null)
+                   this.SelectedElement = dynRevitSettings.Doc.Document.GetElement(f.ElementId);
+            }
+            catch { }
+        }
     }
 
     [NodeName("Select Edge")]
@@ -702,10 +769,11 @@ namespace Dynamo.Nodes
     public class dynEdgeOnElementBySelection : dynElementSelection, IDrawable
     {
         Reference f;
+        public RenderDescription RenderDescription { get; set; }
 
         public dynEdgeOnElementBySelection()
             : base(new PortData("edge", "The edge", typeof(Value.Container)))
-        { }
+        {}
 
         protected override void OnSelectClick()
         {
@@ -738,15 +806,34 @@ namespace Dynamo.Nodes
             }
         }
 
-        public RenderDescription Draw()
+        public void Draw()
         {
-            RenderDescription rd = new RenderDescription();
+            if (this.RenderDescription == null)
+                this.RenderDescription = new RenderDescription();
+            else
+                this.RenderDescription.ClearAll();
 
             Edge edge = (Edge)dynRevitSettings.Doc.Document.GetElement(f).GetGeometryObjectFromReference(f);
 
-            dynRevitTransactionNode.DrawGeometryElement(rd, edge);
+            dynRevitTransactionNode.DrawGeometryElement(this.RenderDescription, edge);
 
-            return rd;
+        }
+
+        public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
+        {
+
+            dynEl.SetAttribute("edgeRef", this.f.ConvertToStableRepresentation(dynRevitSettings.Doc.Document));
+        }
+
+        public override void LoadElement(XmlNode elNode)
+        {
+            try
+            {
+                this.f = Reference.ParseFromStableRepresentation(dynRevitSettings.Doc.Document, elNode.Attributes["edgeRef"].Value.ToString());
+                if (f != null)
+                    this.SelectedElement = dynRevitSettings.Doc.Document.GetElement(f.ElementId);
+            }
+            catch { }
         }
 
     }
@@ -754,11 +841,12 @@ namespace Dynamo.Nodes
     [NodeName("Select Curve")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a curve from the document.")] //or set of curves in the future
-    public class dynCurvesBySelection : dynElementSelection
+    public class dynCurvesBySelection : dynElementSelection, IDrawable
     {
         public dynCurvesBySelection()
             : base(new PortData("curve", "The curve", typeof(Value.Container)))
-        { }
+        { 
+        }
 
         protected override void OnSelectClick()
         {
@@ -782,6 +870,47 @@ namespace Dynamo.Nodes
                 RaisePropertyChanged("SelectionText");
             }
         }
+
+        public override void LoadElement(XmlNode elNode)
+        {
+            foreach (XmlNode subNode in elNode.ChildNodes)
+            {
+                if (subNode.Name.Equals("instance"))
+                {
+                    Element saved = null;
+                    var id = new ElementId(Convert.ToInt32(subNode.Attributes[0].Value));
+                    try
+                    {
+                        saved = dynRevitSettings.Doc.Document.GetElement(id) as Element; // FamilyInstance;
+                    }
+                    catch
+                    {
+                        dynSettings.Controller.DynamoViewModel.Log("Unable to find element with ID: " + id.IntegerValue);
+                    }
+
+                    //only set the selected element if the element
+                    //returned is of the type required by this node
+                    if(saved is CurveElement)
+                        this.SelectedElement = saved;
+
+                }
+            }
+        }
+
+        #region IDrawable Interface
+        public RenderDescription RenderDescription { get; set; }
+        public void Draw()
+        {
+            if (this.RenderDescription == null)
+                this.RenderDescription = new RenderDescription();
+            else
+                this.RenderDescription.ClearAll();
+
+            CurveElement ce = this.SelectedElement as CurveElement;
+            dynRevitTransactionNode.DrawCurve(this.RenderDescription, ce.GeometryCurve);
+
+        }
+        #endregion
     }
 
     [NodeName("Select Curves")]
