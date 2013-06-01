@@ -78,7 +78,7 @@ namespace Dynamo.Nodes
 
         public dynWatch()
         {
-            var t = new GuessType();
+            var t = new PolymorphicType();
             InPortData.Add(new PortData("", "Node to evaluate.", t));
             OutPortData.Add(new PortData("", "Watch contents.", t));
 

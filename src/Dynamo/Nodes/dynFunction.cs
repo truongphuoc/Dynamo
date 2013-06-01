@@ -408,11 +408,15 @@ namespace Dynamo
 
             internal override IDynamoType TypeCheck(
                 int port, FSharpMap<string, TypeScheme> env,
-                Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+                Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
             {
                 IDynamoType result = env[GUID.ToString()].Instantiate();
-                typeDict[this] = Tuple.Create(
-                    new List<IDynamoType>(), new List<IDynamoType> { result });
+                typeDict[this] = new NodeTypeInformation
+                {
+                    Inputs = new List<IDynamoType>(),
+                    Outputs = new List<IDynamoType> { result },
+                    MapPorts = new List<int>()
+                }; 
                 return result;
             }
 
@@ -450,7 +454,7 @@ namespace Dynamo
 
             protected internal override INode Build(
                 Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort,
-                Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+                Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
             {
                 Dictionary<int, INode> result;
                 if (!preBuilt.TryGetValue(this, out result))

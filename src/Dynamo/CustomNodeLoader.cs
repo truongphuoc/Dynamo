@@ -23,7 +23,9 @@ namespace Dynamo.Utilities
     {
         #region Fields and properties
 
-        private readonly Dictionary<Guid, FunctionDefinition> loadedNodes = new Dictionary<Guid, FunctionDefinition>();
+        private readonly Dictionary<Guid, FunctionDefinition> loadedNodes =
+            new Dictionary<Guid, FunctionDefinition>();
+
         private readonly Dictionary<Guid, string> nodePaths = new Dictionary<Guid, string>();
 
         /// <summary>
@@ -73,7 +75,8 @@ namespace Dynamo.Utilities
                 NodeNames.AsEnumerable()
                          .Select(
                              first =>
-                                new Tuple<string, string, Guid>(first.Key, NodeCategories[first.Value], first.Value));
+                             new Tuple<string, string, Guid>(
+                                 first.Key, NodeCategories[first.Value], first.Value));
         }
 
         /// <summary>
@@ -104,11 +107,9 @@ namespace Dynamo.Utilities
             string name;
             string category;
             if (!GetHeaderFromPath(file, out guid, out name, out category))
-            {
                 return false;
-            }
 
-            this.SetNodeInfo(name, category, guid, file);
+            SetNodeInfo(name, category, guid, file);
             return true;
         }
 
@@ -123,9 +124,7 @@ namespace Dynamo.Utilities
                 return false;
 
             foreach (string file in Directory.EnumerateFiles(SearchPath, "*.dyf"))
-            {
                 AddFileToPath(file);
-            }
 
             return true;
         }
@@ -192,7 +191,7 @@ namespace Dynamo.Utilities
 
             if (IsInitialized(id))
                 return loadedNodes[id];
-            
+
             FunctionDefinition def;
             return GetDefinitionFromPath(id, dynSettings.Controller, out def) ? def : null;
         }
@@ -258,7 +257,8 @@ namespace Dynamo.Utilities
         ///     Get a guid from the name of a node.  If it doesn't exist, returns Guid.Empty.
         /// </summary>
         /// <param name="guid">Open a definition from a path, without instantiating the nodes or dependents</param>
-        public bool GetNodeInstance(DynamoController controller, string name, out dynFunction result)
+        public bool GetNodeInstance(
+            DynamoController controller, string name, out dynFunction result)
         {
             if (!Contains(name))
             {
@@ -307,9 +307,12 @@ namespace Dynamo.Utilities
                 IEnumerable<dynNodeModel> topMostNodes = ws.GetTopMostNodes();
 
                 List<Tuple<int, dynNodeModel>> topMost = (from topNode in topMostNodes
-                                                          from output in Enumerable.Range(0, topNode.OutPortData.Count)
+                                                          from output in
+                                                              Enumerable.Range(
+                                                                  0, topNode.OutPortData.Count)
                                                           where !topNode.HasOutput(output)
-                                                          select Tuple.Create(output, topNode)).ToList();
+                                                          select Tuple.Create(output, topNode))
+                    .ToList();
 
                 outputs = topMost.Select(x => x.Item2.OutPortData[x.Item1].NickName);
             }
@@ -326,7 +329,8 @@ namespace Dynamo.Utilities
         /// <param name="path">The path from which to get the guid</param>
         /// <param name="guid">A reference to the guid (OUT) Guid.Empty if function returns false. </param>
         /// <returns>Whether we successfully obtained the guid or not.  </returns>
-        public static bool GetHeaderFromPath(string path, out Guid guid, out string name, out string category)
+        public static bool GetHeaderFromPath(
+            string path, out Guid guid, out string name, out string category)
         {
             try
             {
@@ -340,9 +344,10 @@ namespace Dynamo.Utilities
                 xmlDoc.Load(path);
 
                 // load the header
-                IEnumerable<XmlAttribute> query = from XmlNode node in xmlDoc.GetElementsByTagName("dynWorkspace")
-                                                  from XmlAttribute att in node.Attributes
-                                                  select att;
+                IEnumerable<XmlAttribute> query =
+                    from XmlNode node in xmlDoc.GetElementsByTagName("dynWorkspace")
+                    from XmlAttribute att in node.Attributes
+                    select att;
                 foreach (XmlAttribute att in query)
                 {
                     if (att.Name.Equals("Name"))
@@ -369,8 +374,9 @@ namespace Dynamo.Utilities
             }
             catch (Exception e)
             {
-                DynamoLogger.Instance.Log("ERROR: The header for the custom node at " + path +
-                                          " failed to load.  It will be left out of search.");
+                DynamoLogger.Instance.Log(
+                    "ERROR: The header for the custom node at " + path +
+                    " failed to load.  It will be left out of search.");
                 DynamoLogger.Instance.Log(e.ToString());
                 category = "";
                 guid = Guid.Empty;
@@ -398,7 +404,8 @@ namespace Dynamo.Utilities
         /// <param name="controller">Reference to the calling controller</param>
         /// <param name="def">The resultant function definition</param>
         /// <returns></returns>
-        private bool GetDefinitionFromPath(Guid funcDefGuid, DynamoController controller, out FunctionDefinition def)
+        private bool GetDefinitionFromPath(
+            Guid funcDefGuid, DynamoController controller, out FunctionDefinition def)
         {
             try
             {
@@ -416,9 +423,10 @@ namespace Dynamo.Utilities
                 string id = "";
 
                 // load the header
-                IEnumerable<XmlAttribute> query = from XmlNode node in xmlDoc.GetElementsByTagName("dynWorkspace")
-                                                  from XmlAttribute att in node.Attributes
-                                                  select att;
+                IEnumerable<XmlAttribute> query =
+                    from XmlNode node in xmlDoc.GetElementsByTagName("dynWorkspace")
+                    from XmlAttribute att in node.Attributes
+                    select att;
                 foreach (XmlAttribute att in query)
                 {
                     if (att.Name.Equals("X"))
@@ -441,7 +449,8 @@ namespace Dynamo.Utilities
 
                 #endregion
 
-                DynamoCommands.WriteToLogCmd.Execute("Loading node definition for \"" + funName + "\" from: " + xmlPath);
+                DynamoCommands.WriteToLogCmd.Execute(
+                    "Loading node definition for \"" + funName + "\" from: " + xmlPath);
 
                 var workSpace = new FuncWorkspace(
                     funName, category.Length > 0
@@ -456,7 +465,8 @@ namespace Dynamo.Utilities
                 // load a dummy version, so any nodes depending on this node
                 // will find an (empty) identifier on compilation
                 FScheme.Expression dummyExpression = FScheme.Expression.NewNumber_E(0);
-                controller.FSchemeEnvironment.DefineSymbol(def.FunctionId.ToString(), dummyExpression);
+                controller.FSchemeEnvironment.DefineSymbol(
+                    def.FunctionId.ToString(), dummyExpression);
                 loadedNodes.Add(def.FunctionId, def);
 
                 dynWorkspaceModel ws = def.Workspace;
@@ -517,25 +527,31 @@ namespace Dynamo.Utilities
                         if (t == null)
                         {
                             //try to get the also known as values
-                            var q = from kvp in controller.BuiltInTypesByName
-                                    let akaAttribs =
-                                        kvp.Value.Type.GetCustomAttributes(typeof(AlsoKnownAsAttribute),
-                                                                           false)
-                                    where akaAttribs.Any()
-                                    where (akaAttribs[0] as AlsoKnownAsAttribute).Values.Contains(typeName)
-                                    select kvp;
+                            IEnumerable<KeyValuePair<string, TypeLoadData>> q =
+                                from kvp in controller.BuiltInTypesByName
+                                let akaAttribs =
+                                    kvp.Value.Type.GetCustomAttributes(
+                                        typeof(AlsoKnownAsAttribute),
+                                        false)
+                                where akaAttribs.Any()
+                                where
+                                    (akaAttribs[0] as AlsoKnownAsAttribute).Values.Contains(
+                                        typeName)
+                                select kvp;
                             foreach (var kvp in q)
                             {
                                 controller.DynamoViewModel.Log(
-                                    string.Format("Found matching node for {0} also known as {1}", kvp.Key,
-                                                  typeName));
+                                    string.Format(
+                                        "Found matching node for {0} also known as {1}", kvp.Key,
+                                        typeName));
                                 t = kvp.Value.Type;
                             }
                         }
 
                         if (t == null)
                         {
-                            controller.DynamoViewModel.Log("Could not load node of type: " + typeName);
+                            controller.DynamoViewModel.Log(
+                                "Could not load node of type: " + typeName);
                             controller.DynamoViewModel.Log(
                                 "Loading will continue but nodes might be missing from your workflow.");
 
@@ -547,7 +563,8 @@ namespace Dynamo.Utilities
                     else
                         t = tData.Type;
 
-                    dynNodeModel el = dynSettings.Controller.DynamoViewModel.CreateNodeInstance(t, nickname, guid);
+                    dynNodeModel el = dynSettings.Controller.DynamoViewModel.CreateNodeInstance(
+                        t, nickname, guid);
 
                     if (lacingAttrib != null)
                     {
@@ -586,7 +603,8 @@ namespace Dynamo.Utilities
                         }
                         catch
                         {
-                            funId = GuidUtility.Create(GuidUtility.UrlNamespace, nicknameAttrib.Value);
+                            funId = GuidUtility.Create(
+                                GuidUtility.UrlNamespace, nicknameAttrib.Value);
                             fun.Symbol = funId.ToString();
                         }
 
@@ -652,8 +670,10 @@ namespace Dynamo.Utilities
                     catch
                     {
                         DynamoCommands.WriteToLogCmd.Execute(
-                            string.Format("ERROR : Could not create connector between {0} and {1}.", start.NickName,
-                                          end.NickName));
+                            string.Format(
+                                "ERROR : Could not create connector between {0} and {1}.",
+                                start.NickName,
+                                end.NickName));
                     }
                 }
 
@@ -718,9 +738,10 @@ namespace Dynamo.Utilities
             return CompileFunction(definition, ref ins, ref outs);
         }
 
-        public static FScheme.Expression CompileFunction(FunctionDefinition definition,
-                                                         ref IEnumerable<string> inputNames,
-                                                         ref IEnumerable<string> outputNames)
+        public static FScheme.Expression CompileFunction(
+            FunctionDefinition definition,
+            ref IEnumerable<string> inputNames,
+            ref IEnumerable<string> outputNames)
         {
             if (definition == null)
                 return null;
@@ -731,7 +752,7 @@ namespace Dynamo.Utilities
             #region Find outputs
 
             // Find output elements for the node
-            var outputs = functionWorkspace.Nodes.OfType<dynOutput>().ToList();
+            List<dynOutput> outputs = functionWorkspace.Nodes.OfType<dynOutput>().ToList();
 
             var topMost = new List<Tuple<int, dynNodeModel>>();
 
@@ -779,13 +800,15 @@ namespace Dynamo.Utilities
             INode top;
             var buildDict = new Dictionary<dynNodeModel, Dictionary<int, INode>>();
             FSharpMap<string, TypeScheme> typeEnv =
-                MapModule.OfSeq(variables.Select(x => Tuple.Create(x.GUID.ToString(), TypeScheme.Empty())));
-            var typeDict = new Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>>();
+                MapModule.OfSeq(
+                    variables.Select(x => Tuple.Create(x.GUID.ToString(), TypeScheme.Empty())));
+            var typeDict =
+                new Dictionary<dynNodeModel, NodeTypeInformation>();
             var outTypes = new List<IDynamoType>();
 
             foreach (dynNodeModel node in functionWorkspace.GetTopMostNodes())
             {
-                foreach (var i in Enumerable.Range(0, node.OutPortData.Count))
+                foreach (int i in Enumerable.Range(0, node.OutPortData.Count))
                     node.TypeCheck(i, typeEnv, typeDict);
             }
 
@@ -799,10 +822,11 @@ namespace Dynamo.Utilities
                 int i = 0;
                 foreach (var topNode in topMost)
                 {
-                    outTypes.AddRange(typeDict[topNode.Item2].Item2);
-                    
+                    outTypes.AddRange(typeDict[topNode.Item2].Outputs);
+
                     string inputName = i.ToString();
-                    node.ConnectInput(inputName, topNode.Item2.Build(buildDict, topNode.Item1, typeDict));
+                    node.ConnectInput(
+                        inputName, topNode.Item2.Build(buildDict, topNode.Item1, typeDict));
                     i++;
                 }
 
@@ -811,7 +835,7 @@ namespace Dynamo.Utilities
             else if (topMost.Count == 1)
             {
                 Tuple<int, dynNodeModel> topNode = topMost[0];
-                outTypes.AddRange(typeDict[topNode.Item2].Item2);
+                outTypes.AddRange(typeDict[topNode.Item2].Outputs);
                 top = topNode.Item2.BuildExpression(buildDict, typeDict);
             }
             else
@@ -828,10 +852,12 @@ namespace Dynamo.Utilities
                 var beginNode = new BeginNode();
                 List<dynNodeModel> hangingNodes = functionWorkspace.GetTopMostNodes().ToList();
 
-                foreach (var tNode in hangingNodes.Select((x, index) => new { Index = index, Node = x }))
+                foreach (
+                    var tNode in hangingNodes.Select((x, index) => new { Index = index, Node = x }))
                 {
                     beginNode.AddInput(tNode.Index.ToString());
-                    beginNode.ConnectInput(tNode.Index.ToString(), tNode.Node.Build(buildDict, 0, typeDict));
+                    beginNode.ConnectInput(
+                        tNode.Index.ToString(), tNode.Node.Build(buildDict, 0, typeDict));
                 }
 
                 beginNode.AddInput(hangingNodes.Count.ToString());
@@ -841,8 +867,18 @@ namespace Dynamo.Utilities
                 top = beginNode;
             }
 
-            definition.OutputTypes = outTypes;
-            definition.InputTypes = variables.Select(x => typeEnv[x.GUID.ToString()].Type).ToList();
+            List<IDynamoType> inTypes =
+                variables.Select(x => typeEnv[x.GUID.ToString()].Type).ToList();
+
+            var allGuessTypes = new HashSet<IDynamoType>(
+                outTypes.OfType<GuessType>().Concat(inTypes.OfType<GuessType>()));
+
+            Dictionary<IDynamoType, PolymorphicType> guessDict = allGuessTypes.ToDictionary(
+                x => x, _ => new PolymorphicType());
+
+            definition.OutputTypes =
+                outTypes.Select(x => x is GuessType ? guessDict[x] : x).ToList();
+            definition.InputTypes = inTypes.Select(x => x is GuessType ? guessDict[x] : x).ToList();
 
             // make the anonymous function
             FScheme.Expression expression = Utils.MakeAnon(

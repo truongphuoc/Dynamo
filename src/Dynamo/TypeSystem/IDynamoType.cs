@@ -8,40 +8,71 @@ using Microsoft.FSharp.Core;
 
 namespace Dynamo.TypeSystem
 {
+    public class NodeTypeInformation
+    {
+        public List<IDynamoType> Inputs;
+        public List<IDynamoType> Outputs;
+        public List<int> MapPorts;
+    }
+
+    public class UnificationResult
+    {
+        public IDynamoType Defined { get; internal set; }
+        public IDynamoType Expected { get; internal set; }
+        public int ReductionAmount { get; internal set; }
+    }
+
     internal static class UnifyExtension
     {
-        public static bool Unify(this IDynamoType a, IDynamoType b)
+        public static bool Unify(this IDynamoType defined, IDynamoType expected, UnificationResult result)
         {
-            //return a.Equals(b) || unify(a as dynamic, b as dynamic);
+            //return defined.Equals(expected) || unify(defined as dynamic, expected as dynamic);
 
-            if (a.Equals(b))
-                return true;
-
-            if (a is GuessType)
+            if (defined.Equals(expected))
             {
-                var t1 = a as GuessType;
+                return true;
+            }
+
+            if (defined is GuessType)
+            {
+                var t1 = defined as GuessType;
                 if (t1.HasType)
-                    return t1.Type.Unify(b);
-                t1.Type = b;
+                    return t1.Type.Unify(expected, result);
+                t1.Type = expected;
                 return true;
             }
 
-            if (b is GuessType)
-                return b.Unify(a);
-
-            if (a is FunctionType && b is FunctionType)
+            if (expected is GuessType)
             {
-                var t1 = (FunctionType)a;
-                var t2 = (FunctionType)b;
-                return t1.Inputs.Zip(t2.Inputs, Tuple.Create).All(x => x.Item1.Unify(x.Item2))
-                       && t1.Output.Unify(t2.Output);
+                var t2 = expected as GuessType;
+                if (t2.HasType)
+                    return t2.Type.Unify(defined, result);
+                t2.Type = defined;
+                return true;
             }
 
-            if (a is ListType && b is ListType)
+            if (defined is FunctionType && expected is FunctionType)
             {
-                var t1 = (ListType)a;
-                var t2 = (ListType)b;
-                return t1.InnerType.Unify(t2.InnerType);
+                var t1 = (FunctionType)defined;
+                var t2 = (FunctionType)expected;
+                var funResult = new UnificationResult();
+                return t1.Inputs.Zip(t2.Inputs, Tuple.Create).All(inputPair => inputPair.Item1.Unify(inputPair.Item2, funResult))
+                    && t1.Output.Unify(t2.Output, funResult)
+                    && funResult.ReductionAmount == 0;
+            }
+
+            if (expected is ListType)
+            {
+                var t2 = (ListType)expected;
+                if (defined is ListType)
+                {
+                    var t1 = (ListType)defined;
+                    return t1.InnerType.Unify(t2.InnerType, result);
+                }
+
+                var reduced = defined.Unify(t2.InnerType, result);
+                result.ReductionAmount++;
+                return reduced;
             }
 
             return false;
@@ -53,6 +84,7 @@ namespace Dynamo.TypeSystem
         IDynamoType Subst(FSharpMap<Guid, IDynamoType> vsAndTs);
         FSharpSet<IDynamoType> GatherGuesses(FSharpSet<IDynamoType> accumulator);
         IDynamoType Unwrap();
+        IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict);
     }
 
     internal interface IAtomType : IDynamoType
@@ -120,9 +152,19 @@ namespace Dynamo.TypeSystem
             return this;
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return this;
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return "Unit";
         }
     }
 
@@ -162,9 +204,22 @@ namespace Dynamo.TypeSystem
             return new FunctionType(Inputs.Select(x => x.Unwrap()), Output.Unwrap());
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return new FunctionType(
+                Inputs.Select(x => x.InstantiatePolymorphicTypes(polyDict)), 
+                Output.InstantiatePolymorphicTypes(polyDict));
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return "(" + string.Join(" ", Inputs.Select(x => x.ToString())) + " -> " + Output
+                   + ")";
         }
     }
 
@@ -187,7 +242,7 @@ namespace Dynamo.TypeSystem
             var tail = types.Tail;
             Type2 = tail.Length == 1
                         ? tail.Head
-                        : new TypeUnion(tail);
+                        : new TypeIntersection(tail);
         }
 
         public IDynamoType Subst(FSharpMap<Guid, IDynamoType> vsAndTs)
@@ -205,9 +260,21 @@ namespace Dynamo.TypeSystem
             return new TypeIntersection(Type1.Unwrap(), Type2.Unwrap());
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return new TypeIntersection(
+                Type1.InstantiatePolymorphicTypes(polyDict), 
+                Type2.InstantiatePolymorphicTypes(polyDict));
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return "(" + string.Join(" ∧ ", Type1, Type2) + ")";
         }
     }
 
@@ -248,9 +315,21 @@ namespace Dynamo.TypeSystem
             return new TypeUnion(Type1.Unwrap(), Type2.Unwrap());
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return new TypeUnion(
+                Type1.InstantiatePolymorphicTypes(polyDict),
+                Type2.InstantiatePolymorphicTypes(polyDict));
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return "(" + string.Join(" ∨ ", Type1, Type2) + ")";
         }
     }
 
@@ -278,9 +357,19 @@ namespace Dynamo.TypeSystem
             return new ListType(InnerType.Unwrap());
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return new ListType(InnerType.InstantiatePolymorphicTypes(polyDict));
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return InnerType + " list";
         }
     }
 
@@ -301,9 +390,19 @@ namespace Dynamo.TypeSystem
             return this;
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return this;
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return "Number";
         }
     }
 
@@ -324,9 +423,19 @@ namespace Dynamo.TypeSystem
             return this;
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return this;
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return "String";
         }
     }
 
@@ -347,9 +456,19 @@ namespace Dynamo.TypeSystem
             return this;
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return this;
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return "Any";
         }
     }
 
@@ -387,6 +506,11 @@ namespace Dynamo.TypeSystem
             return this;
         }
 
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return this;
+        }
+
         public int CompareTo(object obj)
         {
             throw new NotImplementedException();
@@ -396,9 +520,45 @@ namespace Dynamo.TypeSystem
         {
             return obj is ObjectType && ((ObjectType)obj).Type == Type;
         }
+
+        public override string ToString()
+        {
+            return Type.ToString();
+        }
     }
 
-    public class GuessType : IDynamoType
+    public class PolymorphicType : IDynamoType
+    {
+        public int CompareTo(object obj)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IDynamoType Subst(FSharpMap<Guid, IDynamoType> vsAndTs)
+        {
+            throw new NotImplementedException();
+        }
+
+        public FSharpSet<IDynamoType> GatherGuesses(FSharpSet<IDynamoType> accumulator)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IDynamoType Unwrap()
+        {
+            throw new NotImplementedException();
+        }
+
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            if (!polyDict.ContainsKey(this))
+                polyDict[this] = new GuessType();
+
+            return polyDict[this];
+        }
+    }
+
+    internal class GuessType : IDynamoType
     {
         private IDynamoType _type;
 
@@ -428,6 +588,11 @@ namespace Dynamo.TypeSystem
             return HasType 
                 ? Type.Unwrap() 
                 : this;
+        }
+
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
+        {
+            return this;
         }
 
         public int CompareTo(object obj)
@@ -476,6 +641,11 @@ namespace Dynamo.TypeSystem
         }
 
         public IDynamoType Unwrap()
+        {
+            return this;
+        }
+
+        public IDynamoType InstantiatePolymorphicTypes(Dictionary<PolymorphicType, IDynamoType> polyDict)
         {
             return this;
         }

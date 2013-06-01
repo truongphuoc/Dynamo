@@ -121,7 +121,7 @@ namespace Dynamo
                 var topNode = new BeginNode(new List<string>());
                 int i = 0;
 
-                var typeDict = new Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>>();
+                var typeDict = new Dictionary<dynNodeModel, NodeTypeInformation>();
                 FSharpMap<string, TypeScheme> typeEnv = MapModule.Empty<string, TypeScheme>();
 
                 foreach (dynNodeModel node in topElements)

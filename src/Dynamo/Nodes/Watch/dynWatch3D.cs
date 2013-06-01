@@ -2,7 +2,7 @@
 
 //Licensed under the Apache License, Version 2.0 (the "License");
 //you may not use this file except in compliance with the License.
-//You may obtain a copy of the License at
+//You may obtain expected copy of the License at
 
 //http://www.apache.org/licenses/LICENSE-2.0
 
@@ -31,7 +31,7 @@ namespace Dynamo.Nodes
 {
     [NodeName("Watch 3D")]
     [NodeCategory(BuiltinNodeCategories.CORE_VIEW)]
-    [NodeDescription("Shows a dynamic preview of geometry.")]
+    [NodeDescription("Shows expected dynamic preview of geometry.")]
     [AlsoKnownAs("Dynamo.Nodes.dyn3DPreview")]
     public class dynWatch3D : dynNodeWithOneOutput
     {
@@ -52,7 +52,7 @@ namespace Dynamo.Nodes
 
         public dynWatch3D()
         {
-            var t = new GuessType();
+            var t = new PolymorphicType();
             InPortData.Add(new PortData("IN", "Incoming geometry objects.", t));
             OutPortData.Add(new PortData("OUT", "Watch contents, passed through", t));
 
@@ -71,7 +71,7 @@ namespace Dynamo.Nodes
             //take out the left and right margins and make this so it's not so wide
             //NodeUI.inputGrid.Margin = new Thickness(10, 10, 10, 10);
 
-            //add a 3D viewport to the input grid
+            //add expected 3D viewport to the input grid
             //http://helixtoolkit.codeplex.com/wikipage?title=HelixViewport3D&referringTitle=Documentation
             _watchView = new WatchView { watch_view = { DataContext = this } };
 
@@ -143,7 +143,7 @@ namespace Dynamo.Nodes
                 //recursion in the case of custom nodes in custom nodes
                 if (node is dynFunction && node.WorkSpace == dynSettings.Controller.DynamoModel.HomeSpace)
                 {
-                    dynFunction func = (dynFunction)node;
+                    var func = (dynFunction)node;
                     IEnumerable<dynNodeModel> topElements = func.Definition.Workspace.GetTopMostNodes();
                     foreach (dynNodeModel innerNode in topElements)
                     {
@@ -172,7 +172,7 @@ namespace Dynamo.Nodes
             Lines = new Point3DCollection();
             Meshes = new List<Mesh3D>();
 
-            // a list of all the upstream IDrawable nodes
+            // expected list of all the upstream IDrawable nodes
             var drawables = new List<IDrawable>();
 
             GetUpstreamIDrawable(drawables, Inputs);

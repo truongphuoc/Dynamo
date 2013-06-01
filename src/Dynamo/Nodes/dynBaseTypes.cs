@@ -252,7 +252,7 @@ namespace Dynamo.Nodes
     {
         public dynIdentity()
         {
-            var t = new GuessType();
+            var t = new PolymorphicType();
 
             InPortData.Add(new PortData("x", "in", t));
             OutPortData.Add(new PortData("x", "out", t));
@@ -275,7 +275,7 @@ namespace Dynamo.Nodes
         public dynReverse()
             : base("reverse")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
             var t1 = new ListType(pType);
 
             InPortData.Add(new PortData("list", "List to sort", t1));
@@ -292,7 +292,7 @@ namespace Dynamo.Nodes
     {
         public dynNewList()
         {
-            InPortData.Add(new PortData("item(s)", "Item(s) to build a list out of", new ListType(new GuessType())));
+            InPortData.Add(new PortData("item(s)", "Item(s) to build a list out of", new PolymorphicType()));
             OutPortData.Add(new PortData("list", "A list", null));
 
             RegisterAllPorts();
@@ -307,7 +307,10 @@ namespace Dynamo.Nodes
 
         protected override IDynamoType GetOutputType(int index)
         {
-            return new TypeUnion(InPortData.Select(x => x.PortType));
+            return new ListType(
+                InPortData.Count == 1
+                    ? GetInputType(0)
+                    : new TypeUnion(InPortData.Select((x, i) => GetInputType(i))));
         }
 
         protected override string getInputRootName()
@@ -358,7 +361,7 @@ namespace Dynamo.Nodes
         public dynSortWith()
             : base("sort-with")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("c(x, y)", "Comparitor", new FunctionType(pType, pType, new NumberType())));
             InPortData.Add(new PortData("list", "List to sort", new ListType(pType)));
@@ -376,7 +379,7 @@ namespace Dynamo.Nodes
         public dynSortBy()
             : base("sort-by")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("c(x)", "Key Mapper",
                                         new FunctionType(pType, new TypeUnion(new StringType(), new NumberType()))));
@@ -395,7 +398,7 @@ namespace Dynamo.Nodes
         public dynSort()
             : base("sort")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("list", "List of numbers or strings to sort", new ListType(pType)));
             OutPortData.Add(new PortData("sorted", "Sorted list", new ListType(pType)));
@@ -413,8 +416,8 @@ namespace Dynamo.Nodes
         public dynFold()
             : base("foldl")
         {
-            var a = new GuessType();
-            var b = new GuessType();
+            var a = new PolymorphicType();
+            var b = new PolymorphicType();
 
             InPortData.Add(new PortData("f(x, a)", "Reductor Funtion", new FunctionType(a, b, b)));
             InPortData.Add(new PortData("a", "Seed", b));
@@ -433,7 +436,7 @@ namespace Dynamo.Nodes
         public dynFilter()
             : base("filter")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("p(x)", "Predicate", new FunctionType(pType, new NumberType())));
             InPortData.Add(new PortData("seq", "Sequence to filter", new ListType(pType)));
@@ -467,12 +470,12 @@ namespace Dynamo.Nodes
     [NodeSearchTags("zip")]
     public class dynCombine : dynVariableInput
     {
-        private readonly GuessType _outType = new GuessType();
+        private readonly PolymorphicType _outType = new PolymorphicType();
 
         public dynCombine()
         {
-            var a = new GuessType();
-            var b = new GuessType();
+            var a = new PolymorphicType();
+            var b = new PolymorphicType();
 
             InPortData.Add(new PortData("comb", "Combinator", null));
             InPortData.Add(new PortData("list1", "First list", new ListType(a)));
@@ -487,7 +490,7 @@ namespace Dynamo.Nodes
         {
             return index == 0
                        ? (IDynamoType)new FunctionType(InPortData.Skip(1).Select(x => x.PortType), _outType)
-                       : new GuessType();
+                       : new PolymorphicType();
         }
 
         protected override string getInputRootName()
@@ -531,7 +534,7 @@ namespace Dynamo.Nodes
             {
                 for (; inputs > 2; inputs--)
                 {
-                    var t = new GuessType();
+                    var t = new PolymorphicType();
                     InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "", new ListType(t)));
                 }
 
@@ -557,13 +560,13 @@ namespace Dynamo.Nodes
     [NodeSearchTags("cross")]
     public class dynCartProd : dynVariableInput
     {
-        private readonly GuessType _outType = new GuessType();
+        private readonly PolymorphicType _outType = new PolymorphicType();
 
         public dynCartProd()
         {
             InPortData.Add(new PortData("comb", "Combinator", null));
-            InPortData.Add(new PortData("list1", "First list", new ListType(new GuessType())));
-            InPortData.Add(new PortData("list2", "Second list", new ListType(new GuessType())));
+            InPortData.Add(new PortData("list1", "First list", new ListType(new PolymorphicType())));
+            InPortData.Add(new PortData("list2", "Second list", new ListType(new PolymorphicType())));
             OutPortData.Add(new PortData("combined", "Combined lists", new ListType(_outType)));
 
             RegisterAllPorts();
@@ -573,7 +576,7 @@ namespace Dynamo.Nodes
         {
             return index == 0
                        ? (IDynamoType)new FunctionType(InPortData.Skip(1).Select(x => x.PortType), _outType)
-                       : new GuessType();
+                       : new PolymorphicType();
         }
 
         protected override string getInputRootName()
@@ -618,7 +621,7 @@ namespace Dynamo.Nodes
                 for (; inputs > 2; inputs--)
                 {
                     InPortData.Add(new PortData(getInputRootName() + getNewInputIndex(), "",
-                                                new ListType(new GuessType())));
+                                                new ListType(new PolymorphicType())));
                 }
 
                 RegisterAllPorts();
@@ -645,8 +648,8 @@ namespace Dynamo.Nodes
         public dynMap()
             : base("map")
         {
-            var t = new GuessType();
-            var t2 = new GuessType();
+            var t = new PolymorphicType();
+            var t2 = new PolymorphicType();
 
             InPortData.Add(new PortData("f(x)", "The procedure used to map elements", new FunctionType(t, t2)));
             InPortData.Add(new PortData("seq", "The sequence to map over.", new ListType(t)));
@@ -663,7 +666,7 @@ namespace Dynamo.Nodes
     {
         public dynDeCons()
         {
-            var t = new GuessType();
+            var t = new PolymorphicType();
 
             InPortData.Add(new PortData("list", "", new ListType(t)));
             OutPortData.Add(new PortData("first", "", t));
@@ -689,7 +692,7 @@ namespace Dynamo.Nodes
         public dynList()
             : base("cons")
         {
-            var t = new GuessType();
+            var t = new PolymorphicType();
 
             InPortData.Add(new PortData("first", "The new Head of the list", t));
             InPortData.Add(new PortData("rest", "The new Tail of the list", new ListType(t)));
@@ -707,7 +710,7 @@ namespace Dynamo.Nodes
         public dynTakeList()
             : base("take")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("amt", "Amount of elements to extract", new NumberType()));
             InPortData.Add(new PortData("list", "The list to extract elements from", new ListType(pType)));
@@ -725,7 +728,7 @@ namespace Dynamo.Nodes
         public dynDropList()
             : base("drop")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("amt", "Amount of elements to drop", new NumberType()));
             InPortData.Add(new PortData("list", "The list to drop elements from", new ListType(pType)));
@@ -743,7 +746,7 @@ namespace Dynamo.Nodes
         public dynGetFromList()
             : base("get")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("index", "Index of the element to extract", new NumberType()));
             InPortData.Add(new PortData("list", "The list to extract elements from", new ListType(pType)));
@@ -761,7 +764,7 @@ namespace Dynamo.Nodes
     {
         public dynEmpty()
         {
-            OutPortData.Add(new PortData("empty", "An empty list", new ListType(new GuessType())));
+            OutPortData.Add(new PortData("empty", "An empty list", new ListType(new PolymorphicType())));
 
             RegisterAllPorts();
         }
@@ -777,7 +780,7 @@ namespace Dynamo.Nodes
             return FScheme.Value.NewList(FSharpList<FScheme.Value>.Empty);
         }
 
-        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             Dictionary<int, INode> result;
             if (!preBuilt.TryGetValue(this, out result))
@@ -798,7 +801,7 @@ namespace Dynamo.Nodes
         public dynIsEmpty()
             : base("empty?")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("list", "A list", new ListType(pType)));
             OutPortData.Add(new PortData("empty?", "Is the given list empty?", new NumberType()));
@@ -816,7 +819,7 @@ namespace Dynamo.Nodes
         public dynLength()
             : base("len")
         {
-            InPortData.Add(new PortData("list", "A list", new ListType(new GuessType())));
+            InPortData.Add(new PortData("list", "A list", new ListType(new PolymorphicType())));
             OutPortData.Add(new PortData("length", "Length of the list", new NumberType()));
 
             RegisterAllPorts();
@@ -831,7 +834,7 @@ namespace Dynamo.Nodes
         public dynAppend()
             : base("append")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("listA", "First list", new ListType(pType)));
             InPortData.Add(new PortData("listB", "Second list", new ListType(pType)));
@@ -849,7 +852,7 @@ namespace Dynamo.Nodes
         public dynFirst()
             : base("first")
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("list", "A list", new ListType(pType)));
             OutPortData.Add(new PortData("first", "First element in the list", pType));
@@ -866,7 +869,7 @@ namespace Dynamo.Nodes
         public dynRest()
             : base("rest")
         {
-            var t = new ListType(new GuessType());
+            var t = new ListType(new PolymorphicType());
 
             InPortData.Add(new PortData("list", "A list", t));
             OutPortData.Add(new PortData("rest", "List without the first element.", t));
@@ -952,7 +955,7 @@ namespace Dynamo.Nodes
         }
 
 
-        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             Dictionary<int, INode> result;
             if (!preBuilt.TryGetValue(this, out result))
@@ -1016,7 +1019,7 @@ namespace Dynamo.Nodes
 
         public override void SetupCustomUIElements(dynNodeView nodeUI) { }
 
-        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             Dictionary<int, INode> result;
             if (!preBuilt.TryGetValue(this, out result))
@@ -1305,7 +1308,7 @@ namespace Dynamo.Nodes
             set { }
         }
 
-        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             Dictionary<int, INode> result;
             if (!preBuilt.TryGetValue(this, out result))
@@ -1473,7 +1476,7 @@ namespace Dynamo.Nodes
 
         private static INode nestedBegins(Stack<Tuple<int, dynNodeModel>> inputs,
                                           Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt,
-                                          Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+                                          Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             Tuple<int, dynNodeModel> popped = inputs.Pop();
             INode firstVal = popped.Item2.Build(preBuilt, popped.Item1, typeDict);
@@ -1488,7 +1491,7 @@ namespace Dynamo.Nodes
             return firstVal;
         }
 
-        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             if (!Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
@@ -1518,7 +1521,9 @@ namespace Dynamo.Nodes
     [NodeDescription("Applies arguments to a function")]
     public class dynApply1 : dynVariableInput
     {
-        private readonly GuessType _outType = new GuessType();
+        private readonly PolymorphicType _outType = new PolymorphicType();
+
+        private Dictionary<int, IDynamoType> _inTypes = new Dictionary<int, IDynamoType>(); 
 
         public dynApply1()
         {
@@ -1531,8 +1536,12 @@ namespace Dynamo.Nodes
         protected override IDynamoType GetInputType(int index)
         {
             if (index == 0)
-                return new FunctionType(InPortData.Skip(1).Select(x => x.PortType), _outType);
-            return new GuessType();
+                return new FunctionType(Enumerable.Range(1, InPortData.Count - 1).Select(GetInputType), _outType);
+
+            if (!_inTypes.ContainsKey(index))
+                _inTypes[index] = new PolymorphicType();
+
+            return _inTypes[index];
         }
 
         protected override string getInputRootName()
@@ -1540,7 +1549,7 @@ namespace Dynamo.Nodes
             return "arg";
         }
 
-        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             if (!Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
@@ -1583,7 +1592,7 @@ namespace Dynamo.Nodes
                         select subNode;
             foreach (XmlNode subNode in query)
             {
-                InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", new GuessType()));
+                InPortData.Add(new PortData(subNode.Attributes["name"].Value, "", new PolymorphicType()));
             }
             RegisterAllPorts();
         }
@@ -1597,8 +1606,8 @@ namespace Dynamo.Nodes
     {
         public dynConditional()
         {
-            var a = new GuessType();
-            //TypeVar b = new GuessType();
+            var a = new PolymorphicType();
+            //TypeVar b = new PolymorphicType();
 
             InPortData.Add(new PortData("test", "Test block", new NumberType()));
             InPortData.Add(new PortData("true", "True block", a));
@@ -1608,7 +1617,7 @@ namespace Dynamo.Nodes
             RegisterAllPorts();
         }
 
-        internal override IDynamoType TypeCheck(int port, FSharpMap<string, TypeScheme> env, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        internal override IDynamoType TypeCheck(int port, FSharpMap<string, TypeScheme> env, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             if (!Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
@@ -1618,7 +1627,7 @@ namespace Dynamo.Nodes
             return base.TypeCheck(port, env, typeDict);
         }
 
-        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, Tuple<List<IDynamoType>, List<IDynamoType>>> typeDict)
+        protected internal override INode Build(Dictionary<dynNodeModel, Dictionary<int, INode>> preBuilt, int outPort, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             if (!Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
@@ -1644,7 +1653,7 @@ namespace Dynamo.Nodes
 
         public dynBreakpoint()
         {
-            var pType = new GuessType();
+            var pType = new PolymorphicType();
 
             InPortData.Add(new PortData("", "Object to inspect", pType));
             OutPortData.Add(new PortData("", "Object inspected", pType));

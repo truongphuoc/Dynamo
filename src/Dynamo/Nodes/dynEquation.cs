@@ -129,7 +129,7 @@ namespace Dynamo.Nodes
                     paramSet.Add(name);
 
                     IEnumerable<IDynamoType> inputs =
-                        args.Parameters.Select(_ => new GuessType() as IDynamoType);
+                        args.Parameters.Select(_ => new PolymorphicType() as IDynamoType);
 
                     parameters.Add(
                         Formula.IndexOf(name, StringComparison.Ordinal),
