@@ -143,11 +143,11 @@ namespace Dynamo.FSchemeInterop.Node
     //Node representing an FScheme Number.
     public class NumberNode : INode
     {
-        double num;
+        readonly double _num;
 
         public NumberNode(double v)
         {
-            num = v;
+            _num = v;
         }
 
         protected override Expression compileBody(
@@ -155,18 +155,18 @@ namespace Dynamo.FSchemeInterop.Node
             Dictionary<INode, List<INode>> letEntries,
             HashSet<string> initializedIds)
         {
-            return Expression.NewNumber_E(num);
+            return Expression.NewNumber_E(_num);
         }
     }
 
     //Node representing an FScheme String.
     public class StringNode : INode
     {
-        string str;
+        readonly string _str;
 
         public StringNode(string s)
         {
-            str = s;
+            _str = s;
         }
 
         protected override Expression compileBody(
@@ -174,18 +174,18 @@ namespace Dynamo.FSchemeInterop.Node
             Dictionary<INode, List<INode>> letEntries,
             HashSet<string> initializedIds)
         {
-            return Expression.NewString_E(str);
+            return Expression.NewString_E(_str);
         }
     }
 
     //Node representing an FScheme Container for objects.
     public class ObjectNode : INode
     {
-        object obj;
+        readonly object _obj;
 
         public ObjectNode(object o)
         {
-            obj = o;
+            _obj = o;
         }
 
         protected override Expression compileBody(
@@ -193,18 +193,18 @@ namespace Dynamo.FSchemeInterop.Node
             Dictionary<INode, List<INode>> letEntries,
             HashSet<string> initializedIds)
         {
-            return Expression.NewContainer_E(obj);
+            return Expression.NewContainer_E(_obj);
         }
     }
 
     //Node representing an FScheme Symbol.
     public class SymbolNode : INode
     {
-        string symbol;
+        readonly string _symbol;
 
         public SymbolNode(string s)
         {
-            symbol = s;
+            _symbol = s;
         }
 
         protected override Expression compileBody(
@@ -212,7 +212,7 @@ namespace Dynamo.FSchemeInterop.Node
             Dictionary<INode, List<INode>> letEntries,
             HashSet<string> initializedIds)
         {
-            return Expression.NewId(symbol);
+            return Expression.NewId(_symbol);
         }
     }
 
@@ -235,9 +235,9 @@ namespace Dynamo.FSchemeInterop.Node
         public ConditionalNode()
             : base("if", new List<string>() { "test", "true", "false" }) { }
 
-        string _test;
-        string _true;
-        string _false;
+        readonly string _test;
+        readonly string _true;
+        readonly string _false;
 
         protected override Expression compileBody(
             Dictionary<INode, string> symbols,
@@ -293,12 +293,12 @@ namespace Dynamo.FSchemeInterop.Node
         //Dictionary mapping inputs to nodes, used to evaluate arguments.
         protected Dictionary<string, INode> arguments = new Dictionary<string, INode>();
 
-        public InputNode(IEnumerable<string> inputNames)
+        protected InputNode(IEnumerable<string> inputNames)
         {
             Inputs = inputNames.ToList();
         }
 
-        public InputNode(params string[] inputNames)
+        protected InputNode(params string[] inputNames)
             : this(inputNames.ToList())
         { }
 
@@ -356,7 +356,7 @@ namespace Dynamo.FSchemeInterop.Node
             Dictionary<INode, List<INode>> letEntries,
             HashSet<string> initializedIds);
 
-        public ProcedureCallNode(IEnumerable<string> inputNames) 
+        protected ProcedureCallNode(IEnumerable<string> inputNames) 
             : base(inputNames) 
         { }
         
@@ -436,9 +436,9 @@ namespace Dynamo.FSchemeInterop.Node
     public class ApplierNode : ProcedureCallNode
     {
         //The procedure to be executed.
-        protected INode procedure;
+        protected INode Procedure;
 
-        protected string procedureInput;
+        protected string ProcedureInput;
 
         protected override List<string> Inputs
         {
@@ -457,22 +457,22 @@ namespace Dynamo.FSchemeInterop.Node
             Dictionary<INode, List<INode>> letEntries,
             HashSet<string> initializedIds)
         {
-            return procedure.compile(symbols, letEntries, initializedIds);
+            return Procedure.compile(symbols, letEntries, initializedIds);
         }
 
         public ApplierNode(IEnumerable<string> inputs)
             : base(inputs)
         {
-            procedureInput = inputs.First();
+            ProcedureInput = inputs.First();
         }
 
         //ConnectInput(string, INode) overridden from FunctionNode
         public override void ConnectInput(string inputName, INode inputNode)
         {
             //Special case: if we are connecting to procedure, update our internal procedure reference.
-            if (inputName.Equals(procedureInput))
+            if (inputName.Equals(ProcedureInput))
             {
-                procedure = inputNode;
+                Procedure = inputNode;
             }
             base.ConnectInput(inputName, inputNode);
         }
@@ -489,8 +489,7 @@ namespace Dynamo.FSchemeInterop.Node
             //TODO
             if (Inputs.Count == 0)
                 throw new ApplierNodeException("Cannot remove Procedure parameter from Apply Node.");
-            else
-                base.RemoveInput();
+            base.RemoveInput();
         }
 
         //RemoveInput(string) overridden from FunctionNode
@@ -499,8 +498,7 @@ namespace Dynamo.FSchemeInterop.Node
             //TODO
             if (inputName.Equals("procedure"))
                 throw new ApplierNodeException("Cannot remove Procedure parameter from Apply Node.");
-            else
-                base.RemoveInput(inputName);
+            base.RemoveInput(inputName);
         }
     }
 
@@ -690,7 +688,7 @@ namespace Dynamo.FSchemeInterop.Node
                     if (letEntries.TryGetValue(parent.Value, out childList))
                         childList.Add(node);
                     else
-                        letEntries[parent.Value] = new List<INode>() { node };
+                        letEntries[parent.Value] = new List<INode> { node };
                 }
             }
 
@@ -714,10 +712,9 @@ namespace Dynamo.FSchemeInterop.Node
             if (!perms.Contains(node))
             {
                 temps.Add(node);
-                foreach (var child in childAccessor(node))
+                if (childAccessor(node).Any(child => !visit(child, temps, perms, onMark, childAccessor)))
                 {
-                    if (!visit(child, temps, perms, onMark, childAccessor))
-                        return false;
+                    return false;
                 }
                 perms.Add(node);
                 temps.Remove(node);
@@ -732,7 +729,7 @@ namespace Dynamo.FSchemeInterop.Node
             public T Value { get; private set; }
             public Tree<T> Parent { get; private set; }
 
-            private HashSet<Tree<T>> children = new HashSet<Tree<T>>();
+            private readonly HashSet<Tree<T>> children = new HashSet<Tree<T>>();
             public IEnumerable<Tree<T>> Children { get { return children; } }
 
             public bool IsRoot { get { return Parent == null; } }

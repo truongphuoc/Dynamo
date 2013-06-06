@@ -413,7 +413,7 @@ namespace Dynamo
                 IDynamoType result = env[GUID.ToString()].Instantiate();
                 typeDict[this] = new NodeTypeInformation
                 {
-                    Inputs = new List<IDynamoType>(),
+                    //Inputs = new List<IDynamoType>(),
                     Outputs = new List<IDynamoType> { result },
                     MapPorts = new List<int>()
                 }; 

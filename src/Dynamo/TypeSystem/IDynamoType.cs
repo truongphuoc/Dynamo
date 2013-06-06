@@ -10,7 +10,7 @@ namespace Dynamo.TypeSystem
 {
     public class NodeTypeInformation
     {
-        public List<IDynamoType> Inputs;
+        //public List<IDynamoType> Inputs;
         public List<IDynamoType> Outputs;
         public List<int> MapPorts;
     }

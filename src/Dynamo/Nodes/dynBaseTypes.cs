@@ -324,7 +324,6 @@ namespace Dynamo.Nodes
             {
                 InPortData[0].NickName = "item(s)";
                 InPortData[0].ToolTipString = "Item(s) to build a list out of";
-                InPortData[0].PortType = new ListType(InPortData[0].PortType);
             }
             if (InPortData.Count > 1)
                 base.RemoveInput();
@@ -336,7 +335,6 @@ namespace Dynamo.Nodes
             {
                 InPortData[0].NickName = "index0";
                 InPortData[0].ToolTipString = "First item";
-                InPortData[0].PortType = ((ListType)InPortData[0].PortType).InnerType;
             }
             base.AddInput();
         }

@@ -350,6 +350,8 @@ namespace Dynamo.Nodes
         private readonly Dictionary<PortData, FScheme.Value> _evaluationDict =
             new Dictionary<PortData, FScheme.Value>();
 
+        private bool _laced;
+
         public dynNodeModel()
         {
             InPortData = new ObservableCollection<PortData>();
@@ -459,14 +461,20 @@ namespace Dynamo.Nodes
             int port, FSharpMap<string, TypeScheme> env,
             Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
+            //All the types of the InPorts
             List<IDynamoType> inputTypes =
                     Enumerable.Range(0, InPortData.Count).Select(GetInputType).ToList();
+            //Type of the requested OutPort
             IDynamoType outputType = GetOutputType(port);
 
+            //Type Guesses corresponding to Polymorphic Types
             var polyDict = new Dictionary<PolymorphicType, IDynamoType>();
 
-            
+            var mapPorts = new List<int>();
 
+            IDynamoType result;
+
+            //Are all inputs connected?
             if (Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
                 var definedType = (FunctionType)TypeScheme.Generalize(
@@ -474,35 +482,34 @@ namespace Dynamo.Nodes
                     new FunctionType(
                         inputTypes.Select(x => x.InstantiatePolymorphicTypes(polyDict)),
                         outputType.InstantiatePolymorphicTypes(polyDict)))
-                                           .Instantiate();
+                                                          .Instantiate();
 
                 var query = definedType.Inputs.Zip(
                     Enumerable.Range(0, InPortData.Count).Select(
                         x =>
                         {
                             Tuple<int, dynNodeModel> input = Inputs[x];
-                            return input.Item2.TypeCheck(input.Item1, env, typeDict);
+                            return Tuple.Create(
+                                x, input.Item2.TypeCheck(input.Item1, env, typeDict));
                         }),
-                        (d, e) => new { Defined = d, Expected = e });
+                    (d, e) => new { Defined = d, Expected = e.Item2, Index = e.Item1 });
 
-                var finalInputTypes = new List<IDynamoType>();
-                var mapPorts = new List<int>();
-
-                int idx = 0;
                 foreach (var inputPair in query)
                 {
                     var unity = new UnificationResult();
                     if (inputPair.Defined.Unify(inputPair.Expected, unity))
                     {
-                        finalInputTypes.Add(inputPair.Defined.Unwrap());
+                        //finalInputTypes.Add(inputPair.Defined.Unwrap());
                         mapPorts.Add(unity.ReductionAmount);
                     }
                     else
                     {
-                        Error("Defined type for port \"" + InPortData[idx].NickName + "\" (" + unity.Defined + ") does not match connected type " + unity.Expected);
+                        Error(
+                            "Defined type for port \"" + InPortData[inputPair.Index].NickName
+                            + "\" (" + unity.Defined + ") does not match connected type "
+                            + unity.Expected);
                         throw new Exception("Type check failed.");
                     }
-                    idx++;
                 }
 
                 var t = new GuessType();
@@ -510,54 +517,63 @@ namespace Dynamo.Nodes
                 var rUnity = new UnificationResult();
                 if (definedType.Output.Unify(t, rUnity))
                 {
-                    IDynamoType result = mapPorts.Any(x => x != 0) ? new ListType(t.Unwrap()) : t.Unwrap();
-                    if (typeDict.ContainsKey(this))
-                    {
-                        NodeTypeInformation thisType = typeDict[this];
-                        thisType.Inputs = finalInputTypes;
-                        thisType.MapPorts = mapPorts;
-                        thisType.Outputs[port] = result;
-                    }
-                    else
-                    {
-                        List<IDynamoType> outTypes =
-                            Enumerable.Repeat<IDynamoType>(new UnitType(), OutPortData.Count).ToList();
-                        outTypes[port] = result;
-                        typeDict[this] = new NodeTypeInformation
-                        {
-                            Inputs = finalInputTypes,
-                            Outputs = outTypes,
-                            MapPorts = mapPorts
-                        };
-                    }
-                    return result;
+                    //TODO: Dimension Difference > 1
+                    result = mapPorts.Any(x => x != 0) ? new ListType(t.Unwrap()) : t.Unwrap();
                 }
-                
-                throw new Exception("Type check failed.");
-            }
-
-            var inputs = new List<IDynamoType>();
-
-            foreach (int inDataIdx in InPortData.Select((_, i) => i))
-            {
-                Tuple<int, dynNodeModel> input;
-                if (TryGetInput(inDataIdx, out input))
+                else
                 {
-                    var unity = new UnificationResult();
-                    if (input.Item2.TypeCheck(input.Item1, env, typeDict)
-                             .Unify(GetInputType(inDataIdx), unity))
-                        continue;
                     throw new Exception("Type check failed.");
                 }
-                inputs.Add(GetInputType(inDataIdx));
+            }
+            else
+            {
+                var inputs = new List<IDynamoType>();
+
+                foreach (int inDataIdx in InPortData.Select((_, i) => i))
+                {
+                    Tuple<int, dynNodeModel> input;
+                    if (TryGetInput(inDataIdx, out input))
+                    {
+                        var unity = new UnificationResult();
+                        if (input.Item2.TypeCheck(input.Item1, env, typeDict)
+                                 .Unify(GetInputType(inDataIdx), unity))
+                        {
+                            mapPorts.Add(unity.ReductionAmount);
+                        }
+                        else
+                            throw new Exception("Type check failed.");
+                    }
+                    inputs.Add(GetInputType(inDataIdx));
+                }
+
+                result = TypeScheme.Generalize(
+                    env,
+                    new FunctionType(
+                        inputs.Select(x => x.InstantiatePolymorphicTypes(polyDict)),
+                        outputType.InstantiatePolymorphicTypes(polyDict)))
+                                   .Instantiate();
             }
 
-            return TypeScheme.Generalize(
-                env, 
-                new FunctionType(
-                    inputs.Select(x => x.InstantiatePolymorphicTypes(polyDict)), 
-                    outputType.InstantiatePolymorphicTypes(polyDict)))
-                             .Instantiate();
+            if (typeDict.ContainsKey(this))
+            {
+                NodeTypeInformation thisType = typeDict[this];
+                //thisType.Inputs = finalInputTypes;
+                thisType.MapPorts = mapPorts;
+                thisType.Outputs[port] = result;
+            }
+            else
+            {
+                List<IDynamoType> outTypes =
+                    Enumerable.Repeat<IDynamoType>(new UnitType(), OutPortData.Count).ToList();
+                outTypes[port] = result;
+                typeDict[this] = new NodeTypeInformation
+                {
+                    //Inputs = finalInputTypes,
+                    Outputs = outTypes,
+                    MapPorts = mapPorts
+                };
+            }
+            return result;
         }
 
         internal virtual INode BuildExpression(Dictionary<dynNodeModel, Dictionary<int, INode>> buildDict, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
@@ -612,12 +628,16 @@ namespace Dynamo.Nodes
             //Is this a partial application?
             bool partial = false;
 
+            //List of parameters that are hanging, for partial function application.
             var partialSymList = new List<string>();
 
+            //List of dimension difference between input type and port type, index by InPort.
             List<int> mapPorts = typeDict[this].MapPorts;
 
-            Converter<FSharpList<FScheme.Value>, FScheme.Value> lacer = null;
+            //Function for lacing argument processing.
+            Converter<FSharpList<FScheme.Value>, FScheme.Value> lacer = FScheme.Identity;
 
+            //Determine the proper lacing function:
             switch (ArgumentLacing)
             {
                 case LacingStrategy.First:
@@ -634,10 +654,20 @@ namespace Dynamo.Nodes
                     break;
             }
 
+            //INode for the lacing application
             InputNode lacerNode = new ExternalFunctionNode(
-                lacer,
+                delegate(FSharpList<FScheme.Value> args)
+                {
+                    if (OldValue == null || !SaveResult || RequiresRecalc)
+                        OldValue = lacer(args);
+                    else
+                        OnEvaluate();
+
+                    return OldValue;
+                },
                 new[] { "function" });
 
+            //Will this node require lacing?
             bool needsLacing = false;
 
             //For each index in InPortData
@@ -647,19 +677,18 @@ namespace Dynamo.Nodes
                     Enumerable.Range(0, InPortData.Count)
                               .Zip(portNames, (data, name) => new { Index = data, Name = name }))
             {
-                //Fetch the corresponding port
-                //var port = InPorts[i];
-
                 Tuple<int, dynNodeModel> input;
 
-                //If this port has connectors...
-                //if (port.Connectors.Any())
+                //Fetch the input
                 if (TryGetInput(data.Index, out input))
                 {
+                    //Build the input.
                     var builtInput = input.Item2.Build(preBuilt, input.Item1, typeDict);
 
+                    //Do we need to lace the input?
                     if (mapPorts[data.Index] > 0 && ArgumentLacing != LacingStrategy.Disabled)
                     {
+                        //Connect to the lacer node.
                         var portName = data.Index.ToString();
                         lacerNode.AddInput(portName);
                         lacerNode.ConnectInput(portName, builtInput);
@@ -667,7 +696,7 @@ namespace Dynamo.Nodes
                     }
                     else
                     {
-                        //Compile input and connect it
+                        //Connect to the node itself.
                         node.ConnectInput(data.Name, builtInput);
                     }
                 }
@@ -678,16 +707,25 @@ namespace Dynamo.Nodes
                 }
             }
 
+            //Remember if we need lacing, this will be used to determine whether or not we're
+            //caching the output from this node.
+            _laced = needsLacing;
+
             if (needsLacing)
             {
+                //Connect the node to the lacer node
                 lacerNode.ConnectInput("function", node);
+
+                //The effective output of this node is now the output of the lacer node.
                 node = lacerNode;
             }
 
             var nodes = new Dictionary<int, INode>();
 
+            //Process multiple outputs
             if (OutPortData.Count > 1)
             {
+                //If there are any hanging inputs, connect an input node to them.
                 foreach (string data in partialSymList)
                     node.ConnectInput(data, new SymbolNode(data));
 
@@ -695,11 +733,12 @@ namespace Dynamo.Nodes
                 int prevIndex = 0;
 
                 var query =
-                    Enumerable.Range(0, OutPortData.Count)
-                              .Zip(OutPortData, (i, d) => new { Index = i, Data = d })
-                              .Where(data => HasOutput(data.Index));
+                    //Get OutPortData and Index of all connected OutPorts
+                    OutPortData.Select((d, i) => new { Index = i, Data = d })
+                               .Where(data => HasOutput(data.Index));
                 foreach (var data in query)
                 {
+                    //Attach a "Drop" node if we're not accessing the first output.
                     if (data.Index > 0)
                     {
                         int diff = data.Index - prevIndex;
@@ -721,18 +760,24 @@ namespace Dynamo.Nodes
                         prevIndex = data.Index;
                     }
 
+                    //Get the element in the output list.
                     var firstNode = new ExternalFunctionNode(
                         FScheme.Car, new List<string> { "list" });
                     firstNode.ConnectInput("list", prev);
 
-                    if (partial)
-                        nodes[data.Index] = new AnonymousFunctionNode(partialSymList, firstNode);
-                    else
-                        nodes[data.Index] = firstNode;
+                    nodes[data.Index] =
+                        partial
+                            //Wrap logic in an Anonymous function if this is a partial application.
+                            ? new AnonymousFunctionNode(partialSymList, firstNode) as INode
+                            //Otherwise, connect directly to the output.
+                            : firstNode;
                 }
             }
             else
+            {
+                //One output, we can directly connect to the node.
                 nodes[outPort] = node;
+            }
 
             //If this is a partial application, then remember not to re-eval.
             if (partial)
@@ -799,7 +844,7 @@ namespace Dynamo.Nodes
 
         private FScheme.Value evalIfDirty(FSharpList<FScheme.Value> args)
         {
-            if (OldValue == null || !SaveResult || RequiresRecalc)
+            if (OldValue == null || _laced || !SaveResult || RequiresRecalc)
             {
                 //Evaluate arguments, then evaluate 
                 OldValue = evaluateNode(args);
