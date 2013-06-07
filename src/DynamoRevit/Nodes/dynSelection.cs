@@ -36,7 +36,7 @@ using Dynamo.FSchemeInterop;
 namespace Dynamo.Nodes
 {
     [IsInteractive(true)]
-    public abstract class dynElementSelection: dynNodeWithOneOutput
+    public abstract class dynElementSelectionBase: dynNodeWithOneOutput
     {
         TextBox tb;
         System.Windows.Controls.Button selectButton;
@@ -61,7 +61,7 @@ namespace Dynamo.Nodes
 
         public abstract string SelectionText { get; set; }
 
-        protected dynElementSelection(PortData outPortData)
+        protected dynElementSelectionBase(PortData outPortData)
         {
             OutPortData.Add(outPortData);
             RegisterAllPorts();
@@ -267,7 +267,7 @@ namespace Dynamo.Nodes
     }
 
     [IsInteractive(true)]
-    public abstract class dynMultipleElementSelection: dynNodeWithOneOutput
+    public abstract class dynMultipleElementSelectionBase: dynNodeWithOneOutput
     {
         TextBox tb;
         System.Windows.Controls.Button selectButton;
@@ -291,7 +291,7 @@ namespace Dynamo.Nodes
         protected string _selectionText;
         public abstract string SelectionText { get; set; }
 
-        protected dynMultipleElementSelection(PortData outData)
+        protected dynMultipleElementSelectionBase(PortData outData)
         {
             OutPortData.Add(outData);
             RegisterAllPorts();
@@ -486,7 +486,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Family Instance")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a family instance from the document.")]
-    public class dynFamilyInstanceCreatorSelection : dynElementSelection
+    public class dynFamilyInstanceCreatorSelection : dynElementSelectionBase
     {
         public dynFamilyInstanceCreatorSelection()
             : base(new PortData("fi", "Family instances created by this operation.", typeof(Value.Container)))
@@ -519,7 +519,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Divided Surface")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a divided surface from the document.")]
-    public class dynDividedSurfaceBySelection : dynElementSelection
+    public class dynDividedSurfaceBySelection : dynElementSelectionBase
     {
         Value data;
 
@@ -690,7 +690,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Face")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a face from the document.")]
-    public class dynFormElementBySelection : dynElementSelection, IDrawable
+    public class dynFormElementBySelection : dynElementSelectionBase, IDrawable
     {
         Reference f;
 
@@ -766,7 +766,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Edge")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select an edge from the document.")]
-    public class dynEdgeOnElementBySelection : dynElementSelection, IDrawable
+    public class dynEdgeOnElementBySelection : dynElementSelectionBase, IDrawable
     {
         Reference f;
         public RenderDescription RenderDescription { get; set; }
@@ -841,7 +841,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Curve")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a curve from the document.")] //or set of curves in the future
-    public class dynCurvesBySelection : dynElementSelection, IDrawable
+    public class dynCurvesBySelection : dynElementSelectionBase, IDrawable
     {
         public dynCurvesBySelection()
             : base(new PortData("curve", "The curve", typeof(Value.Container)))
@@ -916,7 +916,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Curves")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a set of curves from the document.")]
-    public class dynMultipleCurvesBySelection : dynMultipleElementSelection
+    public class dynMultipleCurvesBySelection : dynMultipleElementSelectionBase
     {
         public dynMultipleCurvesBySelection()
             : base(new PortData("curves", "The curves", typeof(Value.Container)))
@@ -966,7 +966,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Point")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a reference point from the document.")]
-    public class dynPointBySelection : dynElementSelection
+    public class dynPointBySelection : dynElementSelectionBase
     {
         public dynPointBySelection() :
             base(new PortData("pt", "The point", typeof(Value.Container)))
@@ -1000,7 +1000,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Level")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a level from the document.")]
-    public class dynLevelBySelection : dynElementSelection
+    public class dynLevelBySelection : dynElementSelectionBase
     {
         public dynLevelBySelection() :
             base(new PortData("lvl", "The selected level", typeof(Value.Container)))
@@ -1033,7 +1033,7 @@ namespace Dynamo.Nodes
     [NodeName("Select Model Element")]
     [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
     [NodeDescription("Select a model element from the document.")]
-    public class dynModelElementSelection : dynElementSelection
+    public class dynModelElementSelection : dynElementSelectionBase
     {
         public dynModelElementSelection()
             : base(new PortData("me", "Model element reference created by this operation.", typeof(Value.Container)))
@@ -1060,6 +1060,241 @@ namespace Dynamo.Nodes
                 _selectionText = value;
                 RaisePropertyChanged("SelectionText");
             }
+        }
+    }
+
+    [NodeName("Select XYZ on element")]
+    [NodeCategory(BuiltinNodeCategories.CORE_SELECTION)]
+    [NodeDescription("Select a XYZ location on model face or edge of the element.")]
+    public class dynXYZBySelection : dynElementSelectionBase, IDrawable
+    {
+        Reference refXYZ;
+        double param0;
+        double param1;
+        bool init;
+
+        public RenderDescription RenderDescription { get; set; }
+
+        public dynXYZBySelection() :
+            base(new PortData("XYZ", "The XYZ location on element", typeof(Value.Container)))
+        {
+        }
+
+        protected override void OnSelectClick()
+        {
+            this.refXYZ = dynRevitSettings.SelectionHelper.RequestReferenceXYZSelection(
+               dynRevitSettings.Doc, "Select a XYZ location on face or edge of the element."
+            );
+            if (this.refXYZ != null)
+               this.SelectedElement = dynRevitSettings.Doc.Document.GetElement(refXYZ.ElementId);
+           this.init = false;
+
+            RaisePropertyChanged("SelectionText");
+        }
+
+       public override Value Evaluate(FSharpList<Value> args)
+       {
+           if (refXYZ.ElementReferenceType != ElementReferenceType.REFERENCE_TYPE_SURFACE &&
+                 refXYZ.ElementReferenceType != ElementReferenceType.REFERENCE_TYPE_LINEAR)
+               throw new Exception("Could not use face or edge which is not part of the model");
+
+            GeometryObject thisObject = this.SelectedElement.GetGeometryObjectFromReference(refXYZ);
+            Autodesk.Revit.DB.Transform thisTrf = null;
+
+       
+           {
+               GeometryObject geomObj = this.SelectedElement.get_Geometry(new Autodesk.Revit.DB.Options());
+               GeometryElement geomElement = geomObj as GeometryElement;
+
+               // ugly code to detect if transform for geometry object is needed or not
+               // filed request to provide this info via API, but meanwhile ...
+               foreach (GeometryObject geob in geomElement)
+               {
+                   if (!(geob is GeometryInstance))
+                       continue;
+                  
+                   GeometryInstance ginsta = geob as GeometryInstance;
+                   GeometryElement gSymbolElement = ginsta.GetSymbolGeometry();
+                   List <GeometryElement> geometryElements = new List <GeometryElement>();
+                  geometryElements.Add(gSymbolElement);
+                  bool found = false;
+                  for (; geometryElements.Count > 0 && !found;)
+                  {
+                       GeometryElement thisGeometryElement = geometryElements[0];
+                       geometryElements.Remove(thisGeometryElement);
+
+                     foreach (GeometryObject geobSym in thisGeometryElement)
+                     {
+                           if (geobSym is GeometryElement)
+                           {
+                               geometryElements.Add((GeometryElement)geobSym);
+                               continue;
+                           }
+                           if ((thisObject is Curve) && (geobSym is Curve) && (thisObject == geobSym))
+                           {
+                               found = true;
+                               break;
+                           }
+
+                           if (thisObject is Curve)
+                               continue;
+
+                           if ((thisObject is Face) && (geobSym is Face) && (thisObject == geobSym))
+                           {
+                               found = true;
+                               break;
+                           }
+
+                           if ((thisObject is Edge) && (geobSym is Face))
+                           {
+                               Edge edge = (Edge)thisObject;
+                               //use GetFace after r2013 support is dropped
+                               if (geobSym == edge.get_Face(0) || geobSym == edge.get_Face(1))
+                               {
+                                   found = true;
+                                   break;
+                               }
+                           }
+                           if (!(geobSym is Solid))
+                               continue;
+
+                           FaceArray solidFaces = ((Solid)geobSym).Faces;
+                           int numFaces = solidFaces.Size;
+                           for (int index = 0; index < numFaces && !found; index++)
+                           {
+                               Face faceAt = solidFaces.get_Item(index);
+                               if ((thisObject is Face) && (thisObject == faceAt))
+                               {
+                                   found = true;
+                                   break;
+                               }
+                               if (thisObject is Edge)
+                               {
+                                   Edge edge = (Edge)thisObject;
+                                   //use GetFace after r2013 support is dropped
+                                   if (faceAt == edge.get_Face(0) || faceAt == edge.get_Face(1))
+                                   {
+                                       found = true;
+                                       break;
+                                   }
+                               }
+                           }
+                       }
+                   }
+
+                   if (found)
+                   {
+                       thisTrf = ginsta.Transform;
+                       break;
+                   }
+               }
+               if (thisObject == null)
+                   throw new Exception("could not resolve reference for XYZ on Element");
+            }
+            XYZ thisXYZ = null;
+            
+            if (refXYZ.ElementReferenceType == ElementReferenceType.REFERENCE_TYPE_SURFACE && thisObject is Face)
+            {
+                Face face = thisObject as Face;
+                if (!init)
+                {
+                   param0 = refXYZ.UVPoint[0];
+                   param1 = refXYZ.UVPoint[1];
+                   init = true;
+                }
+                UV uv = new UV(param0, param1);
+                thisXYZ = face.Evaluate(uv);
+                if (thisTrf != null)
+                    thisXYZ = thisTrf.OfPoint(thisXYZ);
+            }
+            else if (refXYZ.ElementReferenceType == ElementReferenceType.REFERENCE_TYPE_LINEAR )
+            {
+                Curve curve = null;
+                if (thisObject is Edge)
+                {
+                    Edge edge = (Edge)this.SelectedElement.GetGeometryObjectFromReference(refXYZ);
+                    curve = edge.AsCurve();
+                }
+                else
+                    curve = (Curve)this.SelectedElement.GetGeometryObjectFromReference(refXYZ);
+                if (curve != null)
+                {
+                    if (init)
+                        thisXYZ = curve.Evaluate(param0, true);
+                    else
+                    {
+                        XYZ curPoint = refXYZ.GlobalPoint;
+                        if (thisTrf != null)
+                        {
+                            Autodesk.Revit.DB.Transform inverseTrf = thisTrf.Inverse;
+                            curPoint = inverseTrf.OfPoint(refXYZ.GlobalPoint);
+                        }
+                        IntersectionResult thisResult = curve.Project(curPoint);
+                        param0 = curve.ComputeNormalizedParameter(thisResult.Parameter);
+                        init = true;
+                    }
+                    thisXYZ = curve.Evaluate(param0, true);
+                    param1 = -1.0;
+                }
+                else
+                    throw new Exception("could not evaluate point on face or edge of the element");
+                if (thisTrf != null)
+                    thisXYZ = thisTrf.OfPoint(thisXYZ);
+            }
+            else 
+                throw new Exception ("could not evaluate point on face or edge of the element");
+           
+            return Value.NewContainer(thisXYZ);
+        }
+
+        public override string SelectionText
+        {
+            get
+            {
+                return _selectionText = this.refXYZ == null ?
+                    "Nothing Selected" :
+                    "Point on element" + " (" + refXYZ.ElementId + ")";
+            }
+            set
+            {
+                _selectionText = value;
+                RaisePropertyChanged("SelectionText");
+            }
+        }
+
+        public void Draw()
+        {
+            if (this.RenderDescription == null)
+                this.RenderDescription = new RenderDescription();
+            else
+                this.RenderDescription.ClearAll();
+
+            XYZ thisXYZ = refXYZ.GlobalPoint;
+
+            dynRevitTransactionNode.DrawXYZ(this.RenderDescription, thisXYZ);
+        }
+        public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
+        {
+
+            dynEl.SetAttribute("refXYZ", this.refXYZ.ConvertToStableRepresentation(dynRevitSettings.Doc.Document));
+            dynEl.SetAttribute("refXYZparam0", this.param0.ToString());
+            dynEl.SetAttribute("refXYZparam1", this.param1.ToString());
+        }
+
+        public override void LoadElement(XmlNode elNode)
+        {
+            try
+            {
+                this.refXYZ = Reference.ParseFromStableRepresentation(dynRevitSettings.Doc.Document, elNode.Attributes["refXYZ"].Value.ToString());
+                if (refXYZ != null)
+                {
+                    this.SelectedElement = dynRevitSettings.Doc.Document.GetElement(refXYZ.ElementId);
+                }
+                param0 = Convert.ToDouble(elNode.Attributes["refXYZparam0"].Value);
+                param1 = Convert.ToDouble(elNode.Attributes["refXYZparam1"].Value);
+                init = true;
+            }
+            catch { }
         }
     }
 }

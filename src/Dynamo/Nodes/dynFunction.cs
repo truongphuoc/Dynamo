@@ -21,13 +21,14 @@ namespace Dynamo
     namespace Nodes
     {
         [IsInteractive(false)]
-        public class dynFunction : dynBuiltinFunction
+        public class dynFunction : dynNodeWithOneOutput
         {
             private FunctionDefinition _def;
 
-            protected internal dynFunction(IEnumerable<string> inputs, IEnumerable<string> outputs, FunctionDefinition def)
-                : base(def.FunctionId.ToString())
+            protected internal dynFunction(
+                IEnumerable<string> inputs, IEnumerable<string> outputs, FunctionDefinition def)
             {
+                Symbol = def.FunctionId.ToString();
                 _def = def;
 
                 //Set inputs and output
@@ -40,8 +41,24 @@ namespace Dynamo
                 ArgumentLacing = LacingStrategy.Disabled;
             }
 
-            public dynFunction()
-                : base(null) { }
+            public override void SetupCustomUIElements(dynNodeView nodeUI)
+            {
+                ((DropShadowEffect)nodeUI.elementRectangle.Effect).Opacity = 1;
+                ((DropShadowEffect)nodeUI.elementRectangle.Effect).Color = Colors.WhiteSmoke;
+                ((DropShadowEffect)nodeUI.elementRectangle.Effect).BlurRadius = 20;
+                ((DropShadowEffect)nodeUI.elementRectangle.Effect).ShadowDepth = 0;
+
+                nodeUI.MouseDoubleClick +=
+                    new System.Windows.Input.MouseButtonEventHandler(ui_MouseDoubleClick);
+
+            }
+
+            private void ui_MouseDoubleClick(
+                object sender, System.Windows.Input.MouseButtonEventArgs e)
+            {
+                Controller.DynamoViewModel.GoToWorkspaceCommand.Execute(_def.FunctionId);
+                e.Handled = true;
+            }
 
             public FunctionDefinition Definition
             {
@@ -85,22 +102,6 @@ namespace Dynamo
                         }
                     }
                 }
-            }
-
-            public override void SetupCustomUIElements(dynNodeView nodeUI)
-            {
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).Opacity = 1;
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).Color = Colors.WhiteSmoke;
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).BlurRadius = 20;
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).ShadowDepth = 0;
-
-                nodeUI.MouseDoubleClick += ui_MouseDoubleClick;
-            }
-
-            private void ui_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-            {
-                Controller.DynamoViewModel.GoToWorkspaceCommand.Execute(_def.FunctionId);
-                e.Handled = true;
             }
 
             protected override IDynamoType GetInputType(int port)
@@ -203,7 +204,8 @@ namespace Dynamo
                         //Definition = dynSettings.FunctionDict.Values.FirstOrDefault(
                         //    x => x.Workspace.Name == subNode.Attributes[0].Value);
                     }
-                    else if (subNode.Name.Equals("Name")) {
+                    else if (subNode.Name.Equals("Name"))
+                    {
                         if (subNode.Attributes != null) NickName = subNode.Attributes[0].Value;
                     }
                     else if (subNode.Name.Equals("Outputs"))
@@ -212,7 +214,9 @@ namespace Dynamo
                         var query = from XmlNode outputNode in subNode.ChildNodes
                                     let xmlAttributeCollection = outputNode.Attributes
                                     where xmlAttributeCollection != null
-                                    select new PortData(xmlAttributeCollection[0].Value, "Output #" + (i + 1), null);
+                                    select
+                                        new PortData(
+                                        xmlAttributeCollection[0].Value, "Output #" + (i + 1), null);
                         foreach (var data in query)
                         {
                             if (OutPortData.Count > i)
@@ -229,7 +233,9 @@ namespace Dynamo
                         var query = from XmlNode inputNode in subNode.ChildNodes
                                     let xmlAttributeCollection = inputNode.Attributes
                                     where xmlAttributeCollection != null
-                                    select new PortData(xmlAttributeCollection[0].Value, "Input #" + (i + 1), null);
+                                    select
+                                        new PortData(
+                                        xmlAttributeCollection[0].Value, "Input #" + (i + 1), null);
                         foreach (var data in query)
                         {
                             if (InPortData.Count > i)
@@ -240,11 +246,11 @@ namespace Dynamo
                             i++;
                         }
                     }
-                    #region Legacy output support
+                        #region Legacy output support
 
                     else if (subNode.Name.Equals("Output"))
                     {
-                        if (subNode.Attributes != null) 
+                        if (subNode.Attributes != null)
                         {
                             var data = new PortData(
                                 subNode.Attributes[0].Value, "function output", null);
@@ -276,13 +282,27 @@ namespace Dynamo
                 }
                 catch
                 {
-                    funId = GuidUtility.Create(GuidUtility.UrlNamespace, elNode.Attributes["nickname"].Value);
+                    funId = GuidUtility.Create(
+                        GuidUtility.UrlNamespace, elNode.Attributes["nickname"].Value);
                     Symbol = funId.ToString();
                 }
 
                 Definition = dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
             }
 
+            protected override InputNode Compile(IEnumerable<string> portNames)
+            {
+                return SaveResult
+                           ? base.Compile(portNames)
+                           : new FunctionNode(Symbol);
+            }
+
+            public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
+            {
+                return base.Evaluate(args);
+            }
+
+            public string Symbol { get; set; }
         }
 
         [NodeName("Output")]

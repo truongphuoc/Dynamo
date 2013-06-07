@@ -133,15 +133,7 @@ namespace Dynamo.Nodes
         {
             storedPath = ((Value.String)args[0]).Item;
 
-            string contents;
-
-            using (var fs = new FileStream(storedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                using (var reader = new StreamReader(fs))
-                {
-                    contents = reader.ReadToEnd();
-                }
-            }
+            string contents = File.ReadAllText(storedPath);
 
             return Value.NewString(contents);
         }

@@ -85,7 +85,7 @@ namespace Dynamo.Utilities
         /// <returns>A list of the current loaded custom node defs</returns>
         public IEnumerable<FunctionDefinition> GetLoadedDefinitions()
         {
-            return loadedNodes.Values.ToList();
+            return loadedNodes.Values;
         }
 
         /// <summary>
@@ -182,7 +182,7 @@ namespace Dynamo.Utilities
         /// <summary>
         ///     Get the function definition from a guid
         /// </summary>
-        /// <param name="guid">The unique id for the node.</param>
+        /// <param name="id">The unique id for the node.</param>
         /// <returns>The path to the node or null if it wasn't found.</returns>
         public FunctionDefinition GetFunctionDefinition(Guid id)
         {
@@ -452,15 +452,18 @@ namespace Dynamo.Utilities
                 DynamoCommands.WriteToLogCmd.Execute(
                     "Loading node definition for \"" + funName + "\" from: " + xmlPath);
 
-                var workSpace = new FuncWorkspace(
+                var ws = new FuncWorkspace(
                     funName, category.Length > 0
-                                 ? category
-                                 : BuiltinNodeCategories.SCRIPTING_CUSTOMNODES, cx, cy);
+                    ? category
+                    : BuiltinNodeCategories.SCRIPTING_CUSTOMNODES, cx, cy)
+                {
+                    WatchChanges = false
+                };
 
                 def = new FunctionDefinition(Guid.Parse(id))
-                {
-                    Workspace = workSpace
-                };
+                    {
+                        Workspace = ws
+                    };
 
                 // load a dummy version, so any nodes depending on this node
                 // will find an (empty) identifier on compilation
@@ -468,8 +471,6 @@ namespace Dynamo.Utilities
                 controller.FSchemeEnvironment.DefineSymbol(
                     def.FunctionId.ToString(), dummyExpression);
                 loadedNodes.Add(def.FunctionId, def);
-
-                dynWorkspaceModel ws = def.Workspace;
 
                 XmlNodeList elNodes = xmlDoc.GetElementsByTagName("dynElements");
                 XmlNodeList cNodes = xmlDoc.GetElementsByTagName("dynConnectors");
@@ -540,11 +541,15 @@ namespace Dynamo.Utilities
                                 select kvp;
                             foreach (var kvp in q)
                             {
-                                controller.DynamoViewModel.Log(
-                                    string.Format(
-                                        "Found matching node for {0} also known as {1}", kvp.Key,
-                                        typeName));
-                                t = kvp.Value.Type;
+                                var akaAttribs = kvp.Value.Type.GetCustomAttributes(typeof(AlsoKnownAsAttribute), false);
+                                if (akaAttribs.Any())
+                                {
+                                    if ((akaAttribs[0] as AlsoKnownAsAttribute).Values.Contains(typeName))
+                                    {
+                                        controller.DynamoViewModel.Log(string.Format("Found matching node for {0} also known as {1}", kvp.Key, typeName));
+                                        t = kvp.Value.Type;
+                                    }
+                                }
                             }
                         }
 
@@ -718,6 +723,8 @@ namespace Dynamo.Utilities
 
                 FScheme.Expression expression = CompileFunction(def);
                 controller.FSchemeEnvironment.DefineSymbol(def.FunctionId.ToString(), expression);
+
+                ws.WatchChanges = true;
             }
             catch (Exception ex)
             {

@@ -89,7 +89,7 @@ namespace Dynamo.Nodes
 
         public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
         {
-            base.SetupCustomUIElements(NodeUI);
+            base.SetupCustomUIElements(nodeUI);
 
             //add a drop down list to the window
             ComboBox combo = new ComboBox();
@@ -183,11 +183,6 @@ namespace Dynamo.Nodes
             {
                 foreach (FamilySymbol fs in f.Symbols)
                 {
-                    //ComboBoxItem cbi = new ComboBoxItem();
-                    //string comboText = f.Name + ":" + fs.Name;
-                    //cbi.Content = comboText;
-                    //combo.Items.Add(cbi);
-                    //comboHash[comboText] = fs;
                     Items.Add(new DynamoDropDownItem(f.Name + ":" + fs.Name, fs)); 
                 }
             }

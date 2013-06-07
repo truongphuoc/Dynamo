@@ -16,20 +16,36 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Windows.Media;
+using System.Windows.Controls;
+using System.Windows.Forms;
+using System.Windows.Data;
+
 using Autodesk.Revit.DB;
+
+using Microsoft.FSharp.Collections;
+
+using Dynamo.Utilities;
+using Dynamo.Revit;
 using Dynamo.Connectors;
 using Value = Dynamo.FScheme.Value;
 using Dynamo.FSchemeInterop;
-using Microsoft.FSharp.Collections;
-using Dynamo.Utilities;
-using Dynamo.Revit;
+using Dynamo.Controls;
 
 namespace Dynamo.Nodes
 {
+    public abstract class dynMeasurementBase:dynNodeWithOneOutput
+    {
+        protected dynMeasurementBase()
+        {
+            ArgumentLacing = LacingStrategy.Longest;
+        }
+    }
+
     [NodeName("Surface Area")]
     [NodeCategory(BuiltinNodeCategories.ANALYZE_MEASURE)]
     [NodeDescription("An element which measures the surface area of a face (f)")]
-    public class dynSurfaceArea: dynNodeWithOneOutput
+    public class dynSurfaceArea : dynMeasurementBase
     {
         public dynSurfaceArea()
         {
@@ -117,7 +133,7 @@ namespace Dynamo.Nodes
     [NodeName("XYZ Distance")]
     [NodeCategory(BuiltinNodeCategories.ANALYZE_MEASURE)]
     [NodeDescription("Returns the distance between a(XYZ) and b(XYZ).")]
-    public class dynXYZDistance: dynNodeWithOneOutput
+    public class dynXYZDistance : dynMeasurementBase
     {
         public dynXYZDistance()
         {
@@ -140,7 +156,7 @@ namespace Dynamo.Nodes
     [NodeName("Height")]
     [NodeCategory(BuiltinNodeCategories.ANALYZE_MEASURE)]
     [NodeDescription("Returns the height in z of an element.")]
-    public class dynHeight: dynNodeWithOneOutput
+    public class dynHeight : dynMeasurementBase
     {
         public dynHeight()
         {
@@ -189,6 +205,118 @@ namespace Dynamo.Nodes
             return Value.NewNumber(getHeight(a));
         }
     }
+
+    [NodeName("Ref Point Dist")]
+    [NodeCategory(BuiltinNodeCategories.ANALYZE_MEASURE)]
+    [NodeDescription("Measures a distance between point(s).")]
+    public class dynDistanceBetweenPoints : dynMeasurementBase
+    {
+        public dynDistanceBetweenPoints()
+        {
+            InPortData.Add(new PortData("ptA", "Element to measure to.", typeof(Value.Container)));
+            InPortData.Add(new PortData("ptB", "A Reference point.", typeof(Value.Container)));
+
+            OutPortData.Add(new PortData("dist", "Distance between points.", typeof(Value.Number)));
+
+            RegisterAllPorts();
+        }
+
+        private XYZ getXYZ(object arg)
+        {
+            if (arg is ReferencePoint)
+            {
+                return (arg as ReferencePoint).Position;
+            }
+            else if (arg is FamilyInstance)
+            {
+                return ((arg as FamilyInstance).Location as LocationPoint).Point;
+            }
+            else if (arg is XYZ)
+            {
+                return arg as XYZ;
+            }
+            else
+            {
+                throw new Exception("Cannot cast argument to ReferencePoint or FamilyInstance or XYZ.");
+            }
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            //Grab our inputs and turn them into XYZs.
+            XYZ ptA = this.getXYZ(((Value.Container)args[0]).Item);
+            XYZ ptB = this.getXYZ(((Value.Container)args[1]).Item);
+
+            //Return the calculated distance.
+            return Value.NewNumber(ptA.DistanceTo(ptB));
+        }
+    }
+
+    /*
+    [NodeName("Length")]
+    [NodeCategory(BuiltinNodeCategories.ANALYZE_MEASURE)]
+    [NodeDescription("Enter a length in project units.")]
+    public class dynLengthInput : dynDouble
+    {
+        public dynLengthInput()
+        {
+            RegisterAllPorts();
+        }
+
+        public override void SetupCustomUIElements(dynNodeView NodeUI)
+        {
+            //add a text box to the input grid of the control
+            var tb = new dynTextBox();
+            tb.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
+            tb.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+            NodeUI.inputGrid.Children.Add(tb);
+            System.Windows.Controls.Grid.SetColumn(tb, 0);
+            System.Windows.Controls.Grid.SetRow(tb, 0);
+            tb.IsNumeric = false;
+            tb.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
+
+            tb.DataContext = this;
+            var bindingVal = new System.Windows.Data.Binding("Value")
+            {
+                Mode = BindingMode.TwoWay,
+                Converter = new RevitProjectUnitsConverter(),
+                NotifyOnValidationError = false,
+                Source = this,
+                UpdateSourceTrigger = UpdateSourceTrigger.Explicit
+            };
+            tb.SetBinding(System.Windows.Controls.TextBox.TextProperty, bindingVal);
+
+            tb.Text = "0.0";
+        }
+
+        public override double Value
+        {
+            get
+            {
+                return base.Value;
+            }
+            set
+            {
+                if (base.Value == value)
+                    return;
+
+                base.Value = value;
+                //RaisePropertyChanged("Value");
+            }
+        }
+
+        protected override double DeserializeValue(string val)
+        {
+            try
+            {
+                return Convert.ToDouble(val);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+    }*/
 }
 
 

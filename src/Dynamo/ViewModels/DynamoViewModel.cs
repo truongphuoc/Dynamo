@@ -45,9 +45,7 @@ namespace Dynamo.Controls
         private bool consoleShowing;
         private DynamoController controller;
         protected bool debug = false;
-        protected bool dynamicRun = false;
-
-        private string editName = "";
+        protected bool dynamicRun = false; private string editName = "";
         private bool fullscreenWatchShowing;
         private string logText;
         private bool runEnabled = true;
@@ -55,6 +53,7 @@ namespace Dynamo.Controls
         private Point transformOrigin;
         private bool uiLocked = true;
 
+        public DelegateCommand ReportABugCommand { get; set; }
         public DelegateCommand GoToWikiCommand { get; set; }
         public DelegateCommand GoToSourceCodeCommand { get; set; }
         public DelegateCommand ExitCommand { get; set; }
@@ -70,6 +69,7 @@ namespace Dynamo.Controls
         public DelegateCommand ClearCommand { get; set; }
         public DelegateCommand HomeCommand { get; set; }
         public DelegateCommand LayoutAllCommand { get; set; }
+        public DelegateCommand NewHomeWorkspaceCommand { get; set; }
         public DelegateCommand<object> CopyCommand { get; set; }
         public DelegateCommand<object> PasteCommand { get; set; }
         public DelegateCommand ToggleConsoleShowingCommand { get; set; }
@@ -225,8 +225,15 @@ namespace Dynamo.Controls
         /// </summary>
         public int CurrentWorkspaceIndex
         {
-            get { return _model.Workspaces.IndexOf(_model.CurrentSpace); }
-            set { _model.CurrentSpace = _model.Workspaces[value]; }
+            get
+            {
+                var index = _model.Workspaces.IndexOf(_model.CurrentSpace);
+                return index;
+            }
+            set
+            {
+                _model.CurrentSpace = _model.Workspaces[value];
+            }
         }
 
         /// <summary>
@@ -309,25 +316,16 @@ namespace Dynamo.Controls
             #region Initialize Commands
 
             GoToWikiCommand = new DelegateCommand(GoToWiki, CanGoToWiki);
-            GoToSourceCodeCommand = new DelegateCommand(GoToSourceCode, CanGoToSourceCode);
+            ReportABugCommand = new DelegateCommand(ReportABug, CanReportABug);
+            GoToSourceCodeCommand = new DelegateCommand(GoToSourceCode,  CanGoToSourceCode);
             CleanupCommand = new DelegateCommand(Cleanup, CanCleanup);
             ExitCommand = new DelegateCommand(Exit, CanExit);
-            ShowSaveImageDialogAndSaveResultCommand =
-                new DelegateCommand(
-                    ShowSaveImageDialogAndSaveResult,
-                    CanShowSaveImageDialogAndSaveResult);
-            ShowOpenDialogAndOpenResultCommand = new DelegateCommand(
-                ShowOpenDialogAndOpenResult,
-                CanShowOpenDialogAndOpenResultCommand);
-            ShowSaveDialogIfNeededAndSaveResultCommand =
-                new DelegateCommand(
-                    ShowSaveDialogIfNeededAndSaveResult,
-                    CanShowSaveDialogIfNeededAndSaveResultCommand);
-            ShowSaveDialogAndSaveResultCommand = new DelegateCommand(
-                ShowSaveDialogAndSaveResult,
-                CanShowSaveDialogAndSaveResultCommand);
-            ShowNewFunctionDialogCommand = new DelegateCommand(
-                ShowNewFunctionDialog, CanShowNewFunctionDialogCommand);
+            NewHomeWorkspaceCommand = new DelegateCommand(MakeNewHomeWorkspace, CanMakeNewHomeWorkspace);
+            ShowSaveImageDialogAndSaveResultCommand = new DelegateCommand(ShowSaveImageDialogAndSaveResult, CanShowSaveImageDialogAndSaveResult);
+            ShowOpenDialogAndOpenResultCommand = new DelegateCommand(ShowOpenDialogAndOpenResult, CanShowOpenDialogAndOpenResultCommand);
+            ShowSaveDialogIfNeededAndSaveResultCommand = new DelegateCommand(ShowSaveDialogIfNeededAndSaveResult, CanShowSaveDialogIfNeededAndSaveResultCommand);
+            ShowSaveDialogAndSaveResultCommand = new DelegateCommand(ShowSaveDialogAndSaveResult, CanShowSaveDialogAndSaveResultCommand);
+            ShowNewFunctionDialogCommand = new DelegateCommand(ShowNewFunctionDialog, CanShowNewFunctionDialogCommand);
             SaveCommand = new DelegateCommand(Save, CanSave);
             OpenCommand = new DelegateCommand<object>(Open, CanOpen);
             SaveAsCommand = new DelegateCommand<object>(SaveAs, CanSaveAs);
@@ -437,6 +435,32 @@ namespace Dynamo.Controls
             return true;
         }
 
+        private void ReportABug()
+        {
+            Process.Start("https://github.com/ikeough/Dynamo/issues?state=open");
+        }
+
+        private bool CanReportABug()
+        {
+            return true;
+        }
+
+        private void MakeNewHomeWorkspace()
+        {
+            // if the workspace is unsaved, prompt to save
+            // otherwise overwrite the home workspace with new workspace
+            if (!this.Model.HomeSpace.HasUnsavedChanges || AskUserToSaveWorkspaceOrCancel(this.Model.HomeSpace))
+            {
+                this.Model.CurrentSpace = this.Model.HomeSpace;
+                ClearCommand.Execute();
+            }
+        }
+
+        private bool CanMakeNewHomeWorkspace()
+        {
+            return true;
+        }
+
         private void Open(object parameters)
         {
             var xmlPath = parameters as string;
@@ -501,7 +525,13 @@ namespace Dynamo.Controls
 
         private void ShowOpenDialogAndOpenResult()
         {
-            FileDialog fileDialog = new OpenFileDialog
+
+            if ( this.Model.HomeSpace.HasUnsavedChanges && !AskUserToSaveWorkspaceOrCancel(this.Model.HomeSpace))
+            {
+                return;
+            }
+
+            FileDialog fileDialog = new OpenFileDialog()
             {
                 Filter = "Dynamo Definitions (*.dyn; *.dyf)|*.dyn;*.dyf|All files (*.*)|*.*",
                 Title = "Open Dynamo Definition..."
@@ -512,6 +542,17 @@ namespace Dynamo.Controls
             {
                 var fi = new FileInfo(_model.CurrentSpace.FilePath);
                 fileDialog.InitialDirectory = fi.DirectoryName;
+            }
+            else // use the samples directory, if it exists
+            {
+                Assembly dynamoAssembly = Assembly.GetExecutingAssembly();
+                string location = Path.GetDirectoryName(dynamoAssembly.Location);
+                string path = Path.Combine(location, "samples");
+
+                if (Directory.Exists(path))
+                {
+                    fileDialog.InitialDirectory = path;
+                }
             }
 
             if (fileDialog.ShowDialog() == DialogResult.OK)
@@ -669,20 +710,34 @@ namespace Dynamo.Controls
         /// <returns>False if the user cancels, otherwise true</returns>
         public bool AskUserToSaveWorkspaceOrCancel(dynWorkspaceModel workspace)
         {
-            MessageBoxResult result =
-                MessageBox.Show(
-                    "You have unsaved changes to " + workspace.Name
-                    + "\n\n Would you like to save your changes?",
-                    "Confirmation",
-                    MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Question);
-            switch (result)
+            var dialogText = "";
+            if (workspace is FuncWorkspace)
             {
-                case MessageBoxResult.Yes:
-                    ShowSaveDialogIfNeededAndSave(workspace);
-                    break;
-                case MessageBoxResult.Cancel:
-                    return false;
+                dialogText = "You have unsaved changes to custom node workspace " + workspace.Name +
+                             "\n\n Would you like to save your changes?";
+            }
+            else // homeworkspace
+            {
+                if (string.IsNullOrEmpty(workspace.FilePath))
+                {
+                    dialogText = "You haven't saved your changes to the Home workspace. " +
+                                 "\n\n Would you like to save your changes?";
+                }
+                else
+                {
+                    dialogText = "You have unsaved changes to " + Path.GetFileName( workspace.FilePath ) +
+                    "\n\n Would you like to save your changes?";
+                }
+            }
+
+            var result = System.Windows.MessageBox.Show(dialogText, "Confirmation", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                this.ShowSaveDialogIfNeededAndSave(workspace);
+            }
+            else if (result == MessageBoxResult.Cancel)
+            {
+                return false;
             }
             return true;
         }
@@ -738,6 +793,7 @@ namespace Dynamo.Controls
 
             //don't save the file path
             _model.CurrentSpace.FilePath = "";
+            _model.CurrentSpace.HasUnsavedChanges = false;
 
             IsUILocked = false;
         }
@@ -972,8 +1028,11 @@ namespace Dynamo.Controls
 
                 try
                 {
-                    startNode = _model.CurrentSpace.Nodes.FirstOrDefault(
-                        x => x.GUID == (Guid)nodeLookup[c.Start.Owner.GUID]);
+                    var connectorStart = c.Start;
+                    var guidLookup = (Guid)nodeLookup[connectorStart.Owner.GUID];
+
+                    startNode = _model.CurrentSpace.Nodes
+                        .Where(x => x.GUID == guidLookup).FirstOrDefault();
                 }
                 catch
                 {
@@ -1130,8 +1189,12 @@ namespace Dynamo.Controls
 
         private void ShowPackageManager()
         {
-            dynSettings.Bench.PackageManagerLoginStateContainer.Visibility = Visibility.Visible;
-            dynSettings.Bench.PackageManagerMenu.Visibility = Visibility.Visible;
+
+
+            //dynSettings.Bench.PackageManagerLoginStateContainer.Visibility = Visibility.Visible;
+            //dynSettings.Bench.PackageManagerMenu.Visibility = Visibility.Visible;
+
+
         }
 
         private bool CanShowPackageManager()
@@ -1246,24 +1309,40 @@ namespace Dynamo.Controls
             Guid guid;
             string name = data["name"].ToString();
 
-            return dynSettings.Controller.BuiltInTypesByNickname.ContainsKey(name)
-                   || dynSettings.Controller.BuiltInTypesByName.ContainsKey(name)
-                   || (Guid.TryParse(name, out guid)
-                       && dynSettings.Controller.CustomNodeLoader.Contains(guid));
+            if (dynSettings.Controller.BuiltInTypesByNickname.ContainsKey(name)
+                    || dynSettings.Controller.BuiltInTypesByName.ContainsKey(name)
+                    || (Guid.TryParse(name, out guid) && dynSettings.Controller.CustomNodeLoader.Contains(guid)))
+            {
+                return true;
+            }
+
+            string message = string.Format("Can not create instance of node {0}.", data["name"]);
+            DynamoCommands.WriteToLogCmd.Execute(message);
+            Log(message);
+
+            return false;
         }
 
         private void CreateConnection(object parameters)
         {
-            var connectionData = parameters as Dictionary<string, object>;
+            try
+            {
+                Dictionary<string, object> connectionData = parameters as Dictionary<string, object>;
 
-            var start = (dynNodeModel)connectionData["start"];
-            var end = (dynNodeModel)connectionData["end"];
-            var startIndex = (int)connectionData["port_start"];
-            var endIndex = (int)connectionData["port_end"];
+                dynNodeModel start = (dynNodeModel)connectionData["start"];
+                dynNodeModel end = (dynNodeModel)connectionData["end"];
+                int startIndex = (int)connectionData["port_start"];
+                int endIndex = (int)connectionData["port_end"];
 
-            var c = new dynConnectorModel(start, end, startIndex, endIndex, 0);
+                dynConnectorModel c = new dynConnectorModel(start, end, startIndex, endIndex, 0);
 
-            _model.CurrentSpace.Connectors.Add(c);
+                _model.CurrentSpace.Connectors.Add(c);
+            }
+            catch (Exception e)
+            {
+                DynamoLogger.Instance.Log(e.Message);
+                Log(e);
+            }
         }
 
         private static bool CanCreateConnection(object parameters)
@@ -1347,9 +1426,6 @@ namespace Dynamo.Controls
                                        : (dynWorkspaceModel)inputs["workspace"];
 
             ws.Notes.Add(n);
-
-            if (!ViewingHomespace)
-                _model.CurrentSpace.Modified();
         }
 
         private bool CanAddNote(object parameters)
@@ -1651,9 +1727,14 @@ namespace Dynamo.Controls
 
                     if (lacingAttrib != null)
                     {
-                        LacingStrategy lacing;
-                        Enum.TryParse(lacingAttrib.Value, out lacing);
-                        el.ArgumentLacing = lacing;
+                        //don't set the lacing strategy if the type
+                        //wants it disabled
+                        if (el.ArgumentLacing != LacingStrategy.Disabled)
+                        {
+                            var lacing = LacingStrategy.First;
+                            Enum.TryParse(lacingAttrib.Value, out lacing);
+                            el.ArgumentLacing = lacing;
+                        }
                     }
 
                     if (el == null)
@@ -2303,9 +2384,12 @@ namespace Dynamo.Controls
 
                     if (lacingAttrib != null)
                     {
-                        var lacing = LacingStrategy.Disabled;
-                        Enum.TryParse(lacingAttrib.Value, out lacing);
-                        el.ArgumentLacing = lacing;
+                        if (el.ArgumentLacing != LacingStrategy.Disabled)
+                        {
+                            LacingStrategy lacing = LacingStrategy.Disabled;
+                            Enum.TryParse(lacingAttrib.Value, out lacing);
+                            el.ArgumentLacing = lacing;
+                        }
                     }
 
                     el.DisableReporting();
@@ -2444,7 +2528,6 @@ namespace Dynamo.Controls
             _model.CurrentSpace.Connectors.Clear();
             _model.CurrentSpace.Nodes.Clear();
             _model.CurrentSpace.Notes.Clear();
-            _model.CurrentSpace.Modified();
         }
 
         internal FunctionDefinition NewFunction(

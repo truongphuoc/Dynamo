@@ -374,7 +374,7 @@ namespace Dynamo.Nodes
 
             IsSelected = false;
             State = ElementState.Dead;
-            ArgumentLacing = LacingStrategy.First;
+            ArgumentLacing = LacingStrategy.Disabled;
         }
 
         protected internal bool ReportingEnabled
@@ -703,6 +703,7 @@ namespace Dynamo.Nodes
                 else //otherwise, remember that this is a partial application
                 {
                     partial = true;
+                    node.ConnectInput(data.Name, new SymbolNode(data.Name));
                     partialSymList.Add(data.Name);
                 }
             }
@@ -775,8 +776,10 @@ namespace Dynamo.Nodes
             }
             else
             {
-                //One output, we can directly connect to the node.
-                nodes[outPort] = node;
+                if (partial)
+                    nodes[outPort] = new AnonymousFunctionNode(partialSymList, node);
+                else
+                    nodes[outPort] = node;
             }
 
             //If this is a partial application, then remember not to re-eval.

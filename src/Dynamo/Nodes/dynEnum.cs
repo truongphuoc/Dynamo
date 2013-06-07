@@ -14,66 +14,106 @@ namespace Dynamo.Nodes
     [IsInteractive(true)]
     public abstract class dynEnum : dynNodeWithOneOutput
     {
-        ComboBox _combo;
+        public int SelectedIndex { get; set; }
+        public Array Items { get; set; }
 
-        public dynEnum()
+        protected dynEnum()
         {
-            OutPortData.Add(new PortData("", "Enum", new ObjectType(typeof(object))));
-
-            RegisterAllPorts();
+            Items = new[] { "" };
+            SelectedIndex = 0;
         }
 
         public override void SetupCustomUIElements(dynNodeView nodeUI)
         {
-            //widen the control
-            nodeUI.topControl.Width = 300;
+            var comboBox = new ComboBox
+                {
+                    MinWidth = 150,
+                    Padding = new Thickness(8),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
 
-            //add a drop down list to the window
-            _combo = new ComboBox
+            nodeUI.inputGrid.Children.Add(comboBox);
+
+            Grid.SetColumn(comboBox, 0);
+            Grid.SetRow(comboBox, 0);
+
+            comboBox.ItemsSource = this.Items;
+            comboBox.SelectedIndex = this.SelectedIndex;
+
+            comboBox.SelectionChanged += delegate
             {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            nodeUI.inputGrid.Children.Add(_combo);
-
-            Grid.SetColumn(_combo, 0);
-            Grid.SetRow(_combo, 0);
-
-            _combo.SelectionChanged += delegate
-            {
-                if (_combo.SelectedIndex != -1)
-                    RequiresRecalc = true;
+                if (comboBox.SelectedIndex == -1) return;
+                this.RequiresRecalc = true;
+                this.SelectedIndex = comboBox.SelectedIndex;
             };
         }
 
         public void WireToEnum(Array arr)
         {
-            _combo.ItemsSource = arr;
-        }
-
-        public override Value Evaluate(FSharpList<Value> args)
-        {
-            if (_combo.SelectedItem != null)
-            {
-                return Value.NewContainer(_combo.SelectedItem);
-            }
-            throw new Exception("There is nothing selected.");
+            Items = arr;
         }
 
         public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
         {
-            dynEl.SetAttribute("index", _combo.SelectedIndex.ToString());
+            dynEl.SetAttribute("index", this.SelectedIndex.ToString());
         }
 
         public override void LoadElement(XmlNode elNode)
         {
             try
             {
-                _combo.SelectedIndex = Convert.ToInt32(elNode.Attributes["index"].Value);
+                this.SelectedIndex = Convert.ToInt32(elNode.Attributes["index"].Value);
             }
             catch { }
         }
+    }
+
+    [IsInteractive(true)]
+    public abstract class dynEnumAsInt : dynEnum
+    {
+        protected dynEnumAsInt()
+        {
+            OutPortData.Add(new PortData("Int", "The index of the enum", new NumberType()));
+
+            RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            if (this.SelectedIndex < this.Items.Length)
+            {
+                var value = Value.NewNumber(this.SelectedIndex);
+                return value;
+            }
+            throw new Exception("There is nothing selected.");
+        }
+
+    }
+
+    [IsInteractive(true)]
+    public abstract class dynEnumAsString : dynEnum
+    {
+        protected dynEnumAsString()
+        {
+            OutPortData.Add(new PortData("String", "The enum as a string", new StringType()));
+
+            RegisterAllPorts();
+        }
+
+        public override Value Evaluate(FSharpList<Value> args)
+        {
+            if (this.SelectedIndex < this.Items.Length)
+            {
+                var value = Value.NewString( Items.GetValue(this.SelectedIndex).ToString() );
+                return value;
+            }
+            else
+            {
+                throw new Exception("There is nothing selected.");
+            }
+        }
+
     }
 
 }

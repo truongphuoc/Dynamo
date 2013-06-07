@@ -7,13 +7,17 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Xml;
 using Dynamo.Connectors;
+<<<<<<< HEAD
 using Dynamo.Controls;
 using Dynamo.TypeSystem;
 using Dynamo.Utilities;
+=======
+>>>>>>> origin/master
 using DynamoPython;
 using ICSharpCode.AvalonEdit.CodeCompletion;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
+<<<<<<< HEAD
 using IronPython.Hosting;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
@@ -229,14 +233,34 @@ namespace Dynamo.Nodes
         }
     }
 
+=======
+
+using Microsoft.FSharp.Collections;
+
+using Value = Dynamo.FScheme.Value;
+
+namespace Dynamo.Nodes
+{
+    
+>>>>>>> origin/master
     [NodeName("Python Script")]
     [NodeCategory(BuiltinNodeCategories.SCRIPTING_PYTHON)]
     [NodeDescription("Runs an embedded IronPython script")]
     public class dynPython : dynNodeWithOneOutput, IDrawable
     {
+<<<<<<< HEAD
         private readonly Dictionary<string, dynamic> _stateDict = new Dictionary<string, dynamic>();
         private bool _dirty = true;
         private FScheme.Value _lastEvalValue;
+=======
+        private bool dirty = true;
+        private Value lastEvalValue;
+
+        /// <summary>
+        /// Allows a scripter to have a persistent reference to previous runs.
+        /// </summary>
+        private Dictionary<string, dynamic> stateDict = new Dictionary<string, dynamic>();
+>>>>>>> origin/master
 
         private string _script =
             "#The input to this node will be stored in the IN variable.\ndataEnteringNode = IN\n\n#Assign your output to the OUT variable\nOUT = 0";
@@ -254,6 +278,7 @@ namespace Dynamo.Nodes
             ArgumentLacing = LacingStrategy.Disabled;
         }
 
+<<<<<<< HEAD
         //TODO: Make this smarter
         public override bool RequiresRecalc
         {
@@ -274,13 +299,31 @@ namespace Dynamo.Nodes
         }
 
         public override void SetupCustomUIElements(dynNodeView nodeUI)
+=======
+        public override void SetupCustomUIElements(Controls.dynNodeView nodeUI)
+>>>>>>> origin/master
         {
             //topControl.Height = 200;
             //topControl.Width = 300;
 
             //add an edit window option to the 
             //main context window
+<<<<<<< HEAD
             var editWindowItem = new MenuItem
+=======
+            var editWindowItem = new System.Windows.Controls.MenuItem();
+            editWindowItem.Header = "Edit...";
+            editWindowItem.IsCheckable = false;
+            nodeUI.MainContextMenu.Items.Add(editWindowItem);
+            editWindowItem.Click += new RoutedEventHandler(editWindowItem_Click);
+            nodeUI.UpdateLayout();
+        }
+
+        //TODO: Make this smarter
+        public override bool RequiresRecalc
+        {
+            get
+>>>>>>> origin/master
             {
                 Header = "Edit...",
                 IsCheckable = false
@@ -317,7 +360,11 @@ namespace Dynamo.Nodes
                 .Concat(PythonBindings.Bindings)
                 .ToList();
 
+<<<<<<< HEAD
             bindings.Add(new Binding("__persistant__", _stateDict));
+=======
+            bindings.Add(new Binding("__persistent__", this.stateDict));
+>>>>>>> origin/master
 
             return bindings;
         }
@@ -335,6 +382,7 @@ namespace Dynamo.Nodes
             {
                 _editWindow = new dynScriptEditWindow();
                 // callbacks for autocompletion
+<<<<<<< HEAD
                 _editWindow.editText.TextArea.TextEntering += textEditor_TextArea_TextEntering;
                 _editWindow.editText.TextArea.TextEntered += textEditor_TextArea_TextEntered;
 
@@ -348,6 +396,17 @@ namespace Dynamo.Nodes
                     HighlightingLoader.Load(
                         new XmlTextReader(elem),
                         HighlightingManager.Instance);
+=======
+                editWindow.editText.TextArea.TextEntering += textEditor_TextArea_TextEntering;
+                editWindow.editText.TextArea.TextEntered += textEditor_TextArea_TextEntered;
+
+                const string pythonHighlighting = "ICSharpCode.PythonBinding.Resources.Python.xshd";
+                var elem = GetType().Assembly.GetManifestResourceStream("DynamoPython.Resources." + pythonHighlighting);
+
+                editWindow.editText.SyntaxHighlighting =
+                HighlightingLoader.Load(new XmlTextReader(elem ),
+                HighlightingManager.Instance);
+>>>>>>> origin/master
             }
 
             //set the text of the edit window to begin
@@ -371,46 +430,103 @@ namespace Dynamo.Nodes
 
         private void textEditor_TextArea_TextEntered(object sender, TextCompositionEventArgs e)
         {
-            if (e.Text == ".")
+            try
             {
+<<<<<<< HEAD
                 completionWindow = new CompletionWindow(_editWindow.editText.TextArea);
                 IList<ICompletionData> data = completionWindow.CompletionList.CompletionData;
 
                 ICompletionData[] completions =
                     completionProvider.GetCompletionData(
                         _editWindow.editText.Text.Substring(0, _editWindow.editText.CaretOffset));
+=======
+                if (e.Text == ".")
+                {
+                    completionWindow = new CompletionWindow(editWindow.editText.TextArea);
+                    var data = completionWindow.CompletionList.CompletionData;
 
-                if (completions.Length == 0)
-                    return;
+                    var completions =
+                        completionProvider.GetCompletionData(editWindow.editText.Text.Substring(0,
+                                                                                                editWindow.editText
+                                                                                                          .CaretOffset));
+>>>>>>> origin/master
 
+                    if (completions.Length == 0)
+                        return;
+
+<<<<<<< HEAD
                 foreach (ICompletionData ele in completions)
                     data.Add(ele);
+=======
+                    foreach (var ele in completions)
+                    {
+                        data.Add(ele);
+                    }
+>>>>>>> origin/master
 
-                completionWindow.Show();
+                    completionWindow.Show();
 
+<<<<<<< HEAD
                 completionWindow.Closed += delegate { completionWindow = null; };
+=======
+                    completionWindow.Closed += delegate
+                        {
+                            completionWindow = null;
+                        };
+                }
+            }
+            catch (Exception ex)
+            {
+                DynamoLogger.Instance.Log("Failed to perform python autocomplete with exception:");
+                DynamoLogger.Instance.Log(ex.Message);
+                DynamoLogger.Instance.Log(ex.StackTrace);
+>>>>>>> origin/master
             }
         }
 
         private void textEditor_TextArea_TextEntering(object sender, TextCompositionEventArgs e)
         {
+<<<<<<< HEAD
             if (e.Text.Length > 0 && completionWindow != null)
             {
                 if (!char.IsLetterOrDigit(e.Text[0]))
                     completionWindow.CompletionList.RequestInsertion(e);
+=======
+            try {
+                if (e.Text.Length > 0 && completionWindow != null)
+                {
+                    if (!char.IsLetterOrDigit(e.Text[0]))
+                    {
+                        completionWindow.CompletionList.RequestInsertion(e);
+                    }
+                }
+>>>>>>> origin/master
+            }
+            catch (Exception ex)
+            {
+                DynamoLogger.Instance.Log("Failed to perform python autocomplete with exception:");
+                DynamoLogger.Instance.Log(ex.Message);
+                DynamoLogger.Instance.Log(ex.StackTrace);
             }
         }
 
         #endregion
     }
 
-
     [NodeName("Python Script From String")]
     [NodeCategory(BuiltinNodeCategories.SCRIPTING_PYTHON)]
     [NodeDescription("Runs a IronPython script from a string")]
     public class dynPythonString : dynNodeWithOneOutput
     {
+<<<<<<< HEAD
         private readonly Dictionary<string, dynamic> _stateDict = new Dictionary<string, dynamic>();
+=======
+
+        /// <summary>
+        /// Allows a scripter to have a persistent reference to previous runs.
+        /// </summary>
+        private Dictionary<string, dynamic> stateDict = new Dictionary<string, dynamic>();
+>>>>>>> origin/master
 
         public dynPythonString()
         {
@@ -426,6 +542,7 @@ namespace Dynamo.Nodes
         private List<Binding> makeBindings(IEnumerable<FScheme.Value> args)
         {
             //Zip up our inputs
+<<<<<<< HEAD
             List<Binding> bindings = InPortData
                 .Select(x => x.NickName)
                 .Zip(args, (s, v) => new Binding(s, Converters.convertFromValue(v)))
@@ -433,16 +550,33 @@ namespace Dynamo.Nodes
                 .ToList();
 
             bindings.Add(new Binding("__persistant__", _stateDict));
+=======
+            var bindings = 
+               this.InPortData
+               .Select(x => x.NickName)
+               .Zip(args, (s, v) => new Binding(s, Converters.convertFromValue(v)))
+               .Concat(PythonBindings.Bindings)
+               .ToList();
+
+            bindings.Add(new Binding("__persistent__", this.stateDict));
+>>>>>>> origin/master
 
             return bindings;
         }
 
         public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
         {
+<<<<<<< HEAD
             return PythonEngine.Evaluator(
                 RequiresRecalc,
                 ((FScheme.Value.String)args[0]).Item,
                 makeBindings(args.Skip(1)));
+=======
+            var script = ((Value.String) args[0]).Item;
+            var bindings = makeBindings(args);
+            var value = PythonEngine.Evaluator( RequiresRecalc, script, bindings);
+            return value;
+>>>>>>> origin/master
         }
     }
 }

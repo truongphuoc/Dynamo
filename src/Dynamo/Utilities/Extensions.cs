@@ -34,13 +34,20 @@ namespace Dynamo.Utilities
         public static ObservableCollection<T> RemoveRange<T>(this ObservableCollection<T> coll, int index, int count)
         {
             if (index > coll.Count - 1)
-            {
                 throw new ArgumentException("Starting index is greater than the size of the collection.");
-            }
 
-            for (int i = index; i < coll.Count; i++)
+            if (index + count > coll.Count)
+                throw new ArgumentException("Range extends beyond the end of the list.");
+
+            if (count < 0)
+                throw new ArgumentException("Cannot have negative count.");
+
+            if (index < 0)
+                throw new ArgumentException("Cannot have negative index.");
+
+            for (int i = 0; i < count; i++)
             {
-                coll.RemoveAt(i);
+                coll.RemoveAt(index);
             }
 
             return coll;
@@ -98,7 +105,7 @@ namespace Dynamo.Utilities
 
         public static IEnumerable<IEnumerable<T>> ShortestSet<T>(this IEnumerable<IEnumerable<T>> sequences)
         {
-            //find the longest sequences
+            //find the shortest sequences
             int shortest = sequences.Min(x => x.Count());
 
             //the result is a an enumerable

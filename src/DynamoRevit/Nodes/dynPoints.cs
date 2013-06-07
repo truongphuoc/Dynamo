@@ -154,52 +154,6 @@ namespace Dynamo.Nodes
         }
     }
 
-    [NodeName("Ref Point Dist")]
-    [NodeCategory(BuiltinNodeCategories.ANALYZE_MEASURE)]
-    [NodeDescription("Measures a distance between point(s).")]
-    public class dynDistanceBetweenPoints: dynNodeWithOneOutput
-    {
-        public dynDistanceBetweenPoints()
-        {
-            InPortData.Add(new PortData("ptA", "Element to measure to.", typeof(Value.Container)));
-            InPortData.Add(new PortData("ptB", "A Reference point.", typeof(Value.Container)));
-
-            OutPortData.Add(new PortData("dist", "Distance between points.", typeof(Value.Number)));
-
-            RegisterAllPorts();
-        }
-
-        private XYZ getXYZ(object arg)
-        {
-            if (arg is ReferencePoint)
-            {
-                return (arg as ReferencePoint).Position;
-            }
-            else if (arg is FamilyInstance)
-            {
-                return ((arg as FamilyInstance).Location as LocationPoint).Point;
-            }
-            else if (arg is XYZ)
-            {
-                return arg as XYZ;
-            }
-            else
-            {
-                throw new Exception("Cannot cast argument to ReferencePoint or FamilyInstance or XYZ.");
-            }
-        }
-
-        public override Value Evaluate(FSharpList<Value> args)
-        {
-            //Grab our inputs and turn them into XYZs.
-            XYZ ptA = this.getXYZ(((Value.Container)args[0]).Item);
-            XYZ ptB = this.getXYZ(((Value.Container)args[1]).Item);
-
-            //Return the calculated distance.
-            return Value.NewNumber(ptA.DistanceTo(ptB));
-        }
-    }
-
     [NodeName("Ref Point On Edge")]
     [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_POINT)]
     [NodeDescription("Creates an element which owns a reference point on a selected edge.")]
@@ -486,7 +440,7 @@ namespace Dynamo.Nodes
     [NodeName("Evaluate curve or edge")]
     [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_POINT)]
     [NodeDescription("Evaluates curve or edge at parameter.")]
-    public class dynXYZOnCurveOrEdge : dynRevitTransactionNodeWithOneOutput
+    public class dynXYZOnCurveOrEdge : dynXYZBase
     {
         public dynXYZOnCurveOrEdge()
         {
@@ -508,7 +462,7 @@ namespace Dynamo.Nodes
                 Reference r = (Reference)((Value.Container)args[1]).Item;
                 if (r != null)
                 {
-                    Element refElem = this.UIDocument.Document.GetElement(r.ElementId);
+                    Element refElem = dynRevitSettings.Doc.Document.GetElement(r.ElementId);
                     if (refElem != null)
                     {
                         GeometryObject geob = refElem.GetGeometryObjectFromReference(r);
@@ -522,6 +476,7 @@ namespace Dynamo.Nodes
             XYZ result = (thisCurve != null) ? thisCurve.Evaluate(parameter, true) :  
                 (thisEdge == null ? null : thisEdge.Evaluate(parameter));
 
+            pts.Add(result);
 
             return Value.NewContainer(result);
         }
@@ -530,7 +485,7 @@ namespace Dynamo.Nodes
     [NodeName("Evaluate tangent transform of curve or edge")]
     [NodeCategory(BuiltinNodeCategories.CREATEGEOMETRY_POINT)]
     [NodeDescription("Evaluates tangent vector of curve or edge at parameter.")]
-    public class dynTangentTransformOnCurveOrEdge : dynRevitTransactionNodeWithOneOutput
+    public class dynTangentTransformOnCurveOrEdge : dynTransformBase
     {
         public dynTangentTransformOnCurveOrEdge()
         {
@@ -553,7 +508,7 @@ namespace Dynamo.Nodes
                 Reference r = (Reference)((Value.Container)args[1]).Item;
                 if (r != null)
                 {
-                    Element refElem = this.UIDocument.Document.GetElement(r.ElementId);
+                    Element refElem = dynRevitSettings.Doc.Document.GetElement(r.ElementId);
                     if (refElem != null)
                     {
                         GeometryObject geob = refElem.GetGeometryObjectFromReference(r);
@@ -567,6 +522,7 @@ namespace Dynamo.Nodes
             Transform result = (thisCurve != null) ? thisCurve.ComputeDerivatives(parameter, true) : 
                 (thisEdge == null ? null : thisEdge.ComputeDerivatives(parameter));
 
+            transforms.Add(result);
 
             return Value.NewContainer(result);
         }

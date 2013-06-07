@@ -285,6 +285,7 @@ namespace Dynamo
 
         public void RunExpression(bool showErrors = true)
         {
+
             //If we're already running, do nothing.
             if (Running)
                 return;
@@ -402,7 +403,7 @@ namespace Dynamo
                 OnRunCompleted(this, false);
 
                 if (Testing)
-                    Assert.Fail(ex.Message);
+                    Assert.Fail(ex.Message + ":" + ex.StackTrace);
             }
             finally
             {

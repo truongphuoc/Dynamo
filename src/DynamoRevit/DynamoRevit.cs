@@ -23,12 +23,18 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
-using System.Data;
+using System.Collections.ObjectModel;
+using System.Windows.Data;
+using System.Windows.Media;
+using System.Linq;
+using System.Windows.Threading;
+using Microsoft.Practices.Prism.ViewModel;
 
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Analysis;
 using Autodesk.Revit.UI;
+
 using Dynamo.Applications.Properties;
 using Dynamo.Controls;
 using Dynamo.Utilities;
@@ -36,12 +42,15 @@ using IWin32Window = System.Windows.Interop.IWin32Window;
 using MessageBox = System.Windows.Forms.MessageBox;
 using Rectangle = System.Drawing.Rectangle;
 using Dynamo.FSchemeInterop;
-using Dynamo.Commands;
+
+
 #if DEBUG
 using NUnit.Core;
 using NUnit.Core.Filters;
 using NUnit.Framework;
 using NUnit.Util;
+using MessageBoxOptions = System.Windows.MessageBoxOptions;
+
 #endif
 
 //MDJ needed for spatialfeildmanager
@@ -55,7 +64,6 @@ namespace Dynamo.Applications
     public class DynamoRevitApp : IExternalApplication
     {
         private static readonly string m_AssemblyName = Assembly.GetExecutingAssembly().Location;
-        private static string m_AssemblyDirectory = Path.GetDirectoryName(m_AssemblyName);
         public static DynamoUpdater updater;
         private static ResourceManager res;
         public static ExecutionEnvironment env;
@@ -142,20 +150,26 @@ namespace Dynamo.Applications
         }
     }
 
+
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     internal class DynamoRevit : IExternalCommand
     {
-        private static DynamoView dynamoBench;
+        private static DynamoView dynamoView;
         private UIDocument m_doc;
         private UIApplication m_revit;
+        private DynamoController dynamoController;
 
+        public static double? dynamoViewX = null;
+        public static double? dynamoViewY = null;
+        public static double? dynamoViewWidth = null;
+        public static double? dynamoViewHeight = null;
 
         public Result Execute(ExternalCommandData revit, ref string message, ElementSet elements)
         {
-            if (dynamoBench != null)
+            if (dynamoView != null)
             {
-                dynamoBench.Focus();
+                dynamoView.Focus();
                 return Result.Succeeded;
             }
 
@@ -187,22 +201,24 @@ namespace Dynamo.Applications
                         //show the window
 
                         string context = m_revit.Application.VersionName; // string.Format("{0} {1}", m_revit.Application.VersionName, m_revit.Application.VersionNumber);
-                        var dynamoController = new DynamoController_Revit(DynamoRevitApp.env, DynamoRevitApp.updater, true, typeof(DynamoRevitViewModel), context);
-                        dynamoBench = dynSettings.Bench;
+                        dynamoController = new DynamoController_Revit(DynamoRevitApp.env, DynamoRevitApp.updater, true, typeof(DynamoRevitViewModel), context);
+                        dynamoView = dynSettings.Bench;
 
                         //set window handle and show dynamo
-                        new WindowInteropHelper(dynamoBench).Owner = mwHandle;
+                        new WindowInteropHelper(dynamoView).Owner = mwHandle;
 
-                        dynamoBench.WindowStartupLocation = WindowStartupLocation.Manual;
+                        dynamoView.WindowStartupLocation = WindowStartupLocation.Manual;
 
                         Rectangle bounds = Screen.PrimaryScreen.Bounds;
-                        dynamoBench.Left = bounds.X;
-                        dynamoBench.Top = bounds.Y;
-                        dynamoBench.Loaded += dynamoForm_Loaded;
+                        dynamoView.Left = dynamoViewX ?? bounds.X;
+                        dynamoView.Top = dynamoViewY ?? bounds.Y;
+                        dynamoView.Width = dynamoViewWidth ?? 1000.0;
+                        dynamoView.Height = dynamoViewHeight ?? 800.0;
 
-                        dynamoBench.Show();
-
-                        dynamoBench.Closed += dynamoForm_Closed;
+                        dynamoView.Show();
+                        dynamoView.Dispatcher.UnhandledException += DispatcherOnUnhandledException; 
+                        dynamoView.Closing += dynamoView_Closing;
+                        dynamoView.Closed += dynamoView_Closed;
                     });
             }
             catch (Exception ex)
@@ -219,15 +235,76 @@ namespace Dynamo.Applications
             return Result.Succeeded;
         }
 
-        private void dynamoForm_Closed(object sender, EventArgs e)
+        /// <summary>
+        /// A method to deal with unhandle exceptions.  Executes right before Revit crashes.
+        /// Dynamo is still valid at this time, but further work may cause corruption.  Here, 
+        /// we run the ExitCommand, allowing the user to save all of their work.  Then, we send them
+        /// to the issues page on Github. 
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="args">Info about the exception</param>
+        private void DispatcherOnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
         {
-            IdlePromise.ClearPromises();
-            dynamoBench = null;
+            var exceptionMessage = args.Exception.Message;
+            var stackTrace = args.Exception.StackTrace;
+
+            var message =
+                "Dynamo has crashed and is now closing.  You will get a chance to save your work.  \n\nThis is the message given:\n\n" +
+                exceptionMessage + "\n\nThis is where the exception took place: \n\n" + stackTrace;
+
+            MessageBox.Show(message, "Dynamo Error", MessageBoxButtons.OK, MessageBoxIcon.Error,
+                            MessageBoxDefaultButton.Button1);
+
+            try
+            {
+                DynamoLogger.Instance.Log("Dynamo Unhandled Exception");
+                DynamoLogger.Instance.Log(exceptionMessage);
+            }
+            catch
+            {
+
+            }
+
+            try
+            {
+                dynamoController.DynamoViewModel.ExitCommand.Execute();
+                dynamoController.DynamoViewModel.ReportABugCommand.Execute();
+            }
+            catch
+            {
+
+            }
+            finally
+            {
+
+                args.Handled = true;
+            }
+            
         }
 
-        private void dynamoForm_Loaded(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Executes right before Dynamo closes, gives you the chance to cache whatever you might want.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void dynamoView_Closing(object sender, EventArgs e)
         {
-            ((DynamoView) sender).WindowState = WindowState.Maximized;
+            // cache the size of the window for later reloading
+            dynamoViewX = dynamoView.Left;
+            dynamoViewY = dynamoView.Top;
+            dynamoViewWidth = dynamoView.ActualWidth;
+            dynamoViewHeight = dynamoView.ActualHeight;
+            IdlePromise.ClearPromises();
+        }
+
+        /// <summary>
+        /// Executes after Dynamo closes.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void dynamoView_Closed(object sender, EventArgs e)
+        {
+            dynamoView = null;
         }
     }
 
@@ -239,6 +316,7 @@ namespace Dynamo.Applications
     {
         private UIDocument m_doc;
         private UIApplication m_revit;
+        public DynamoTestResultSummary Results{get;set;}
 
         public Result Execute(ExternalCommandData revit, ref string message, ElementSet elements)
         {
@@ -271,10 +349,15 @@ namespace Dynamo.Applications
                 dynamoController.Testing = true;
                 
                 //execute the tests
+                Results = new DynamoTestResultSummary();
+                DynamoRevitTestResultsView resultsView = new DynamoRevitTestResultsView();
+                resultsView.DataContext = Results;
+                resultsView.Show();
+
                 //http://stackoverflow.com/questions/2798561/how-to-run-nunit-from-my-code
                 string assLocation = Assembly.GetExecutingAssembly().Location;
                 FileInfo fi = new FileInfo(assLocation);
-                string testLoc = Path.Combine(fi.DirectoryName, @"DynamoRevitTests.dll");
+                string testLoc = Path.Combine(fi.DirectoryName, @"DynamoRevitTester.dll");
 
                 //Tests must be executed on the main thread in order to access the Revit API.
                 //NUnit's SimpleTestRunner runs the tests on the main thread
@@ -297,7 +380,7 @@ namespace Dynamo.Applications
                     {
                         TestName testName = t.TestName;
                         TestFilter filter = new NameFilter(testName);
-                        TestResult result = t.Run(new RevitTestEventListener(), filter);
+                        TestResult result = t.Run(new RevitTestEventListener(t, Results), filter);
                         ResultSummarizer summ = new ResultSummarizer(result);
                         Assert.AreEqual(1, summ.ResultCount);
                     }
@@ -312,6 +395,15 @@ namespace Dynamo.Applications
                 {
                     DynamoLogger.Instance.FinishLogging();
                 });
+
+                //serialize the test results to a file
+                System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(Results.GetType());
+                string resultsDir = Path.GetDirectoryName(DynamoLogger.Instance.LogPath);
+                string resultsPath = Path.Combine(resultsDir, string.Format("dynamoRevitTests_{0}.xml", Guid.NewGuid().ToString()));
+                using(TextWriter tw = new StreamWriter(resultsPath))
+                {
+                    x.Serialize(tw, Results);
+                }
 
             }
             catch (Exception ex)
@@ -347,6 +439,22 @@ namespace Dynamo.Applications
         }
     }
 
+    public class DynamoRevitTestResult:NotificationObject
+    {
+        DynamoRevitTestResultType _resultType;
+        public DynamoRevitTestResultType ResultType 
+        {
+            get { return _resultType; }
+            set
+            {
+                _resultType = value;
+                RaisePropertyChanged("ResultType");
+            }
+        }
+        public string Message { get; set; }
+        public string TestName { get; set; }
+        public DynamoRevitTestResult(){}
+    }
 
     //http://sqa.stackexchange.com/questions/2880/nunit-global-error-method-event-for-handling-exceptions
     /// <summary>
@@ -354,6 +462,16 @@ namespace Dynamo.Applications
     /// </summary>
     class RevitTestEventListener : EventListener
     {
+        TestMethod _test;
+        DynamoRevitTestResult _result;
+
+        public RevitTestEventListener(TestMethod test, DynamoTestResultSummary summary)
+        {
+            _result = new DynamoRevitTestResult();
+            _test = test;
+            _result.TestName = test.TestName.Name;
+            summary.Results.Add(_result);
+        }
         public void RunStarted(string name, int testCount) {}
         public void RunFinished(TestResult result) { }
         public void RunFinished(Exception exception) { }
@@ -366,21 +484,102 @@ namespace Dynamo.Applications
             if (result.Executed && result.IsFailure)
             {
                 DynamoLogger.Instance.Log(string.Format("Test FAILED : {0}", result.Message));
+                _result.ResultType = DynamoRevitTestResultType.FAIL;
             }
             else if (result.Executed && result.IsSuccess)
+            {
                 DynamoLogger.Instance.Log("Test PASS");
+                _result.ResultType = DynamoRevitTestResultType.PASS;
+            }
             else if (result.Executed && result.IsError)
+            {
                 DynamoLogger.Instance.Log("Test ERROR");
+                _result.ResultType = DynamoRevitTestResultType.ERROR;
+            }
+            _result.Message = result.Message;
         }
         public void SuiteStarted(TestName testName) { }
         public void SuiteFinished(TestResult result) { }
         public void UnhandledException(Exception exception) 
         {
             DynamoLogger.Instance.Log(exception.Message);
+            _result.Message = exception.Message;
         }
         public void TestOutput(TestOutput testOutput) { }
     }
+
+    public class DynamoTestResultSummary:NotificationObject
+    {
+        ObservableCollection<DynamoRevitTestResult> _results;
+        public ObservableCollection<DynamoRevitTestResult> Results
+        {
+            get { return _results; }
+            set
+            {
+                _results = value;
+            }
+        }
+
+        public string TestSummary
+        {
+            get
+            {
+                IEnumerable<DynamoRevitTestResult> results = (IEnumerable<DynamoRevitTestResult>)Results;
+                var list = new List<DynamoRevitTestResult>(results);
+
+                int failCount = list.Where(x => x.ResultType == DynamoRevitTestResultType.FAIL).Count();
+                int passCount = list.Where(x => x.ResultType == DynamoRevitTestResultType.PASS).Count();
+                int errorCount = list.Where(x => x.ResultType == DynamoRevitTestResultType.ERROR).Count();
+                int exceptionCount = list.Where(x => x.ResultType == DynamoRevitTestResultType.EXCEPTION).Count();
+
+                return (string.Format("{0} tests run. {1} passed. {2} failed. {3} exceptions.",
+                    new object[] { Results.Count, passCount, failCount, exceptionCount }));
+            }
+        }
+
+        public DynamoTestResultSummary() 
+        {
+            _results = new ObservableCollection<DynamoRevitTestResult>();
+            _results.CollectionChanged += new System.Collections.Specialized.NotifyCollectionChangedEventHandler(_results_CollectionChanged);
+        }
+
+        void _results_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            RaisePropertyChanged("Results");
+            RaisePropertyChanged("TestSummary");
+        }
+    }
+
 #endif
+
+
+    public enum DynamoRevitTestResultType { PASS, FAIL, ERROR, EXCEPTION }
+
+    public class ResultTypeToColorConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            DynamoRevitTestResultType resultType = (DynamoRevitTestResultType)value;
+            switch (resultType)
+            {
+                case DynamoRevitTestResultType.PASS:
+                    return new SolidColorBrush(System.Windows.Media.Color.FromRgb(0,255,0));
+                case DynamoRevitTestResultType.FAIL:
+                    return new SolidColorBrush(System.Windows.Media.Color.FromRgb(255,0,0));
+                case DynamoRevitTestResultType.ERROR:
+                    return new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 160, 0));
+                case DynamoRevitTestResultType.EXCEPTION:
+                    return new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 0, 0));
+            }
+
+            return System.Drawing.Color.Gray;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            return null;
+        }
+    }
 
     internal class WindowHandle : IWin32Window
     {

@@ -64,13 +64,12 @@ namespace Dynamo.Nodes
                 {
                     _lastComItem.IsChecked = false; // uncheck last checked item
                 }
-                _comItem = new MenuItem
-                {
-                    Header = portName,
-                    IsCheckable = true,
-                    IsChecked = true
-                };
-                _comItem.Checked += comItem_Checked;
+
+                _comItem = new System.Windows.Controls.MenuItem();
+                _comItem.Header = portName;
+                _comItem.IsCheckable = true;
+                _comItem.IsChecked = true;
+                _comItem.Checked += new System.Windows.RoutedEventHandler(comItem_Checked);
                 nodeUI.MainContextMenu.Items.Add(_comItem);
 
                 _port.PortName = portName;
