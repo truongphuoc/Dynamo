@@ -593,35 +593,38 @@ namespace Dynamo.Utilities
                     el.DisableReporting();
                     el.LoadElement(elNode); // inject the node properties from the xml
 
-                    // it has no 
-                    if (el is dynFunction)
-                    {
-                        var fun = el as dynFunction;
+                    // moved this logic to LoadElement in dynFunction --SJE
 
-                        // we've found a custom node, we need to attempt to load its guid.  
-                        // if it doesn't exist (i.e. its a legacy node), we need to assign it one,
-                        // deterministically
-                        Guid funId;
-                        try
-                        {
-                            funId = Guid.Parse(fun.Symbol);
-                        }
-                        catch
-                        {
-                            funId = GuidUtility.Create(
-                                GuidUtility.UrlNamespace, nicknameAttrib.Value);
-                            fun.Symbol = funId.ToString();
-                        }
+                    //if (el is dynFunction)
+                    //{
+                    //    var fun = el as dynFunction;
 
-                        // if it's not a recurisve node and it's not yet loaded, load it
-                        if (funcDefGuid != funId && !loadedNodes.ContainsKey(funId))
-                        {
-                            dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
-                            fun.Definition = loadedNodes[funId];
-                        }
-                        else if (loadedNodes.ContainsKey(funId))
-                            fun.Definition = loadedNodes[funId];
-                    }
+                    //    // we've found a custom node, we need to attempt to load its guid.  
+                    //    // if it doesn't exist (i.e. its a legacy node), we need to assign it one,
+                    //    // deterministically
+                    //    Guid funId;
+                    //    try
+                    //    {
+                    //        funId = Guid.Parse(fun.Symbol);
+                    //    }
+                    //    catch
+                    //    {
+                    //        funId = GuidUtility.Create(GuidUtility.UrlNamespace, nicknameAttrib.Value);
+                    //        fun.Symbol = funId.ToString();
+                    //    }
+
+                    //    // if it's not a recurisve node and it's not yet loaded, load it
+                    //    if (funcDefGuid != funId && !this.loadedNodes.ContainsKey(funId))
+                    //    {
+                    //        dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funId);
+                    //        fun.Definition = this.loadedNodes[funId];
+                    //    }  
+                    //    else if ( this.loadedNodes.ContainsKey(funId ))
+                    //    {
+                    //        fun.Definition = this.loadedNodes[funId];
+                    //    }
+                        
+                    //}
                 }
 
                 #endregion
@@ -661,16 +664,12 @@ namespace Dynamo.Utilities
 
                     try
                     {
-                        if (start != null && end != null && start != end)
-                        {
-                            var newConnector = new dynConnectorModel(
-                                start, end,
-                                startIndex, endIndex,
-                                portType, false
-                                );
-
+                        var newConnector = dynConnectorModel.Make(
+                            start, end,
+                            startIndex, endIndex,
+                            portType );
+                        if ( newConnector != null ) 
                             ws.Connectors.Add(newConnector);
-                        }
                     }
                     catch
                     {
@@ -832,8 +831,14 @@ namespace Dynamo.Utilities
                     outTypes.AddRange(typeDict[topNode.Item2].Outputs);
 
                     string inputName = i.ToString();
+                    
+                    try
+                    {
                     node.ConnectInput(
                         inputName, topNode.Item2.Build(buildDict, topNode.Item1, typeDict));
+                    }
+                    catch { }
+
                     i++;
                 }
 

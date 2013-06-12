@@ -167,13 +167,7 @@ namespace Dynamo.Nodes
                 sfm = SpatialFieldManager.CreateSpatialFieldManager(dynRevitSettings.Doc.ActiveView, Convert.ToInt16(((Value.Number)args[0]).Item));
             }
 
-<<<<<<< HEAD
             return Value.NewContainer(sfm);
-
-=======
-            return Value.NewContainer(sfm);
-            
->>>>>>> Now builds and runs!
         }
 
         void CreateDisplayStyle()

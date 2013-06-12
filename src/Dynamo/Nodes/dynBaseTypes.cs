@@ -447,6 +447,8 @@ namespace Dynamo.Nodes
             OutPortData.Add(new PortData("seq", "New sequence", new ListType(new NumberType())));
 
             RegisterAllPorts();
+
+            ArgumentLacing = LacingStrategy.Longest;
         }
     }
 
@@ -957,6 +959,15 @@ namespace Dynamo.Nodes
                 UpdateSourceTrigger = UpdateSourceTrigger.Explicit
             };
             tb.SetBinding(TextBox.TextProperty, bindingVal);
+
+            if (Value != "")
+                tb.Commit();
+        }
+
+        public override void LoadElement(XmlNode elNode)
+        {
+            base.LoadElement(elNode);
+            processTextForNewInputs();
         }
 
         private void processTextForNewInputs()
@@ -1962,9 +1973,9 @@ namespace Dynamo.Nodes
             enabled = false;
         }
 
-        public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
+        public override Value Evaluate(FSharpList<Value> args)
         {
-            FScheme.Value result = args[0];
+            Value result = args[0];
 
             Controller.DynamoViewModel.Log(FScheme.print(result));
 
@@ -2002,6 +2013,7 @@ namespace Dynamo.Nodes
             BorderThickness = new Thickness(1);
             GotFocus += OnGotFocus;
             LostFocus += OnLostFocus;
+            LostKeyboardFocus += OnLostFocus;
         }
 
         private void OnLostFocus(object sender, RoutedEventArgs routedEventArgs)
@@ -2040,29 +2052,19 @@ namespace Dynamo.Nodes
             {
                 if (value)
                 {
-                    Background = highlighted;
+                    FontStyle = FontStyles.Italic;
                 }
                 else
                 {
-                    Background = clear;
+                    FontStyle = FontStyles.Normal;
                 }
                 _pending = value;
             }
         }
 
-        public new string Text
-        {
-            get { return base.Text; }
-            set
-            {
-                //base.Text = value;
-                commit();
-            }
-        }
-
         public event Action OnChangeCommitted;
 
-        private void commit()
+        public void Commit()
         {
             BindingExpression expr = GetBindingExpression(TextProperty);
             if (expr != null)
@@ -2075,11 +2077,6 @@ namespace Dynamo.Nodes
             //dynSettings.Bench.mainGrid.Focus();
         }
 
-        private bool shouldCommit()
-        {
-            return !dynSettings.Controller.DynamoViewModel.DynamicRunEnabled;
-        }
-
         protected override void OnTextChanged(TextChangedEventArgs e)
         {
             Pending = true;
@@ -2088,7 +2085,7 @@ namespace Dynamo.Nodes
             {
                 int p = CaretIndex;
 
-                base.Text = dynSettings.RemoveChars(
+                Text = dynSettings.RemoveChars(
                     Text,
                     Text.ToCharArray()
                         .Where(c => !char.IsDigit(c) && c != '-' && c != '.')
@@ -2109,9 +2106,29 @@ namespace Dynamo.Nodes
 
         protected override void OnLostFocus(RoutedEventArgs e)
         {
-            commit();
+            Commit();
         }
     }
+
+    public class dynStringTextBox : dynTextBox
+    {
+
+        public dynStringTextBox()
+        {
+            Commit();
+            Pending = false;
+        }
+
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
+        {
+            //if (e.Key == Key.Return || e.Key == Key.Enter)
+            //{
+            //    dynSettings.ReturnFocusToSearch();
+            //}
+        }
+
+    }
+
 
     [IsInteractive(true)]
     public abstract class dynBasicInteractive<T> : dynNodeWithOneOutput
@@ -2186,7 +2203,7 @@ namespace Dynamo.Nodes
 
     public abstract class dynDouble : dynBasicInteractive<double>
     {
-        public dynDouble()
+        protected dynDouble()
         {
             OutPortData.Add(new PortData("", "", new NumberType()));
         }
@@ -2212,7 +2229,7 @@ namespace Dynamo.Nodes
 
     public abstract class dynBool : dynBasicInteractive<bool>
     {
-        public dynBool()
+        protected dynBool()
         {
             OutPortData.Add(new PortData("", "", new NumberType()));
         }
@@ -2225,7 +2242,7 @@ namespace Dynamo.Nodes
 
     public abstract class dynString : dynBasicInteractive<string>
     {
-        public dynString()
+        protected dynString()
         {
             OutPortData.Add(new PortData("", "", new StringType()));
         }
@@ -2277,7 +2294,7 @@ namespace Dynamo.Nodes
             return sb.ToString();
         }
 
-        public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
+        public override Value Evaluate(FSharpList<Value> args)
         {
             return FScheme.Value.NewString(Value);
         }
@@ -2684,25 +2701,32 @@ namespace Dynamo.Nodes
 
         public override void SetupCustomUIElements(dynNodeView nodeUI)
         {
-            //add a text box to the input grid of the control
-            _rbTrue = new RadioButton();
-            _rbFalse = new RadioButton();
-            _rbTrue.VerticalAlignment = VerticalAlignment.Center;
-            _rbFalse.VerticalAlignment = VerticalAlignment.Center;
-
             //use a unique name for the button group
             //so other instances of this element don't get confused
             string groupName = Guid.NewGuid().ToString();
-            _rbTrue.GroupName = groupName;
-            _rbFalse.GroupName = groupName;
 
-            _rbTrue.Content = "1";
-            _rbFalse.Content = "0";
+            //add a text box to the input grid of the control
+            _rbTrue = new RadioButton
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                GroupName = groupName,
+                Content = "1",
+                Padding = new Thickness(5, 0, 12, 0),
+                DataContext = this
+            };
+            _rbFalse = new RadioButton
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                GroupName = groupName,
+                Content = "0",
+                Padding = new Thickness(5, 0, 0, 0),
+                DataContext = this
+            };
 
             var rd = new RowDefinition();
             var cd1 = new ColumnDefinition();
             var cd2 = new ColumnDefinition();
-
+            
             nodeUI.inputGrid.ColumnDefinitions.Add(cd1);
             nodeUI.inputGrid.ColumnDefinitions.Add(cd2);
             nodeUI.inputGrid.RowDefinitions.Add(rd);
@@ -2719,8 +2743,6 @@ namespace Dynamo.Nodes
             _rbTrue.Checked += rbTrue_Checked;
             _rbFalse.Checked += rbFalse_Checked;
 
-            _rbFalse.DataContext = this;
-            _rbTrue.DataContext = this;
 
             var rbTrueBinding = new Binding("Value")
             {
@@ -2778,11 +2800,13 @@ namespace Dynamo.Nodes
         public override void SetupCustomUIElements(dynNodeView nodeUI)
         {
             //add a text box to the input grid of the control
-            tb = new dynTextBox();
-            tb.AcceptsReturn = true;
-            tb.AcceptsTab = true;
-            tb.TextWrapping = TextWrapping.Wrap;
-            tb.MaxWidth = 120;
+            tb = new dynStringTextBox
+            {
+                AcceptsReturn = true,
+                AcceptsTab = true,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 120
+            };
 
             nodeUI.inputGrid.Children.Add(tb);
 
@@ -2827,12 +2851,26 @@ namespace Dynamo.Nodes
         }
     }
 
+    public class dynNodeButton : Button
+    {
+        public dynNodeButton()
+        {
+            var dict = new ResourceDictionary();
+            var uri = new Uri("/DynamoElements;component/Themes/DynamoModern.xaml", UriKind.Relative);
+            dict.Source = uri;
+            Style = (Style)dict["SNodeTextButton"];
+
+            Margin = new Thickness(1);
+        }
+
+    }
+
     [NodeName("Filename")]
     [NodeCategory(BuiltinNodeCategories.CORE_PRIMITIVES)]
     [NodeDescription("Allows you to select a file on the system to get its filename.")]
     public class dynStringFilename : dynBasicInteractive<string>
     {
-        private TextBox tb;
+        TextBox tb;
 
         public dynStringFilename()
         {
@@ -2844,13 +2882,14 @@ namespace Dynamo.Nodes
         public override void SetupCustomUIElements(dynNodeView nodeUI)
         {
             //add a button to the inputGrid on the dynElement
-            var readFileButton = new Button
+            var readFileButton = new dynNodeButton
             {
+                Margin = new Thickness(4),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Content = "Browse..."
             };
-            //readFileButton.Margin = new System.Windows.Thickness(0, 0, 0, 0);
+
             readFileButton.Click += readFileButton_Click;
 
             tb = new TextBox
@@ -2865,7 +2904,7 @@ namespace Dynamo.Nodes
 
             tb.TextChanged += delegate
             {
-                tb.ScrollToHorizontalOffset(double.PositiveInfinity);
+                tb.ScrollToHorizontalOffset(double.PositiveInfinity); 
                 dynSettings.ReturnFocusToSearch();
             };
 
@@ -2907,7 +2946,7 @@ namespace Dynamo.Nodes
                 Value = openDialog.FileName;
         }
 
-        public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
+        public override Value Evaluate(FSharpList<Value> args)
         {
             if (string.IsNullOrEmpty(Value))
                 throw new Exception("No file selected.");
