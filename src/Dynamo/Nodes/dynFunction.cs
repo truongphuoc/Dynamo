@@ -15,13 +15,14 @@ using Dynamo.Nodes;
 using Dynamo.TypeSystem;
 using Dynamo.Utilities;
 using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
 
 namespace Dynamo
 {
     namespace Nodes
     {
         [IsInteractive(false)]
-        public class dynFunction : dynNodeWithOneOutput
+        public class dynFunction : dynNodeModel
         {
             private FunctionDefinition _def;
 
@@ -43,18 +44,10 @@ namespace Dynamo
 
             public override void SetupCustomUIElements(dynNodeView nodeUI)
             {
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).Opacity = 1;
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).Color = Colors.WhiteSmoke;
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).BlurRadius = 20;
-                ((DropShadowEffect)nodeUI.elementRectangle.Effect).ShadowDepth = 0;
-
-                nodeUI.MouseDoubleClick +=
-                    new System.Windows.Input.MouseButtonEventHandler(ui_MouseDoubleClick);
-
+                nodeUI.MouseDoubleClick += ui_MouseDoubleClick;
             }
 
-            private void ui_MouseDoubleClick(
-                object sender, System.Windows.Input.MouseButtonEventArgs e)
+            private void ui_MouseDoubleClick(object sender, MouseButtonEventArgs e)
             {
                 Controller.DynamoViewModel.GoToWorkspaceCommand.Execute(_def.FunctionId);
                 e.Handled = true;
@@ -163,7 +156,7 @@ namespace Dynamo
                 }
             }
 
-            public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
+            public override void SaveNode(XmlDocument xmlDoc, XmlElement dynEl, SaveContext context)
             {
                 //Debug.WriteLine(pd.Object.GetType().ToString());
                 XmlElement outEl = xmlDoc.CreateElement("ID");
@@ -194,19 +187,49 @@ namespace Dynamo
                 dynEl.AppendChild(outEl);
             }
 
-            public override void LoadElement(XmlNode elNode)
+            public override void LoadNode(XmlNode elNode)
             {
                 foreach (XmlNode subNode in elNode.ChildNodes)
                 {
-                    if (subNode.Name.Equals("ID"))
+                    if (subNode.Name.Equals("Name"))
                     {
-                        if (subNode.Attributes != null) Symbol = subNode.Attributes[0].Value;
-                        //Definition = dynSettings.FunctionDict.Values.FirstOrDefault(
-                        //    x => x.Workspace.Name == subNode.Attributes[0].Value);
+                        NickName = subNode.Attributes[0].Value;
                     }
-                    else if (subNode.Name.Equals("Name"))
+                    else if (subNode.Name.Equals("ID"))
                     {
-                        if (subNode.Attributes != null) NickName = subNode.Attributes[0].Value;
+                        Symbol = subNode.Attributes[0].Value;
+
+                        Guid funcId;
+                        Guid.TryParse(Symbol, out funcId);
+
+                        // if the dyf does not exist on the search path...
+                        if (!dynSettings.Controller.CustomNodeLoader.Contains(funcId))
+                        {
+                            var proxyDef = new FunctionDefinition(funcId)
+                            {
+                                Workspace =
+                                    new FuncWorkspace(
+                                        NickName, BuiltinNodeCategories.SCRIPTING_CUSTOMNODES)
+                                    {
+                                        FilePath = null
+                                    }
+                            };
+
+                            SetInputs(new List<string>());
+                            SetOutputs(new List<string>());
+                            RegisterAllPorts();
+                            State = ElementState.Error;
+
+                            var userMsg = "Failed to load custom node: " + NickName + ".  Replacing with proxy custom node.";
+
+                            DynamoLogger.Instance.Log(userMsg);
+
+                            // tell custom node loader, but don't provide path, forcing user to resave explicitly
+                            dynSettings.Controller.CustomNodeLoader.SetFunctionDefinition(funcId, proxyDef);
+                            Definition = dynSettings.Controller.CustomNodeLoader.GetFunctionDefinition(funcId);
+                            ArgumentLacing = LacingStrategy.Disabled;
+                            return;
+                        }
                     }
                     else if (subNode.Name.Equals("Outputs"))
                     {
@@ -246,7 +269,7 @@ namespace Dynamo
                             i++;
                         }
                     }
-                        #region Legacy output support
+                    #region Legacy output support
 
                     else if (subNode.Name.Equals("Output"))
                     {
@@ -297,12 +320,23 @@ namespace Dynamo
                            : new FunctionNode(Symbol);
             }
 
-            public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
-            {
-                return base.Evaluate(args);
-            }
-
             public string Symbol { get; set; }
+
+            public override void Evaluate(FSharpList<FScheme.Value> args, Dictionary<PortData, FScheme.Value> outPuts)
+            {
+                var output = Definition.CompiledValue.Invoke(args);
+
+                if (OutPortData.Count > 1)
+                {
+                    var query = (output as FScheme.Value.List).Item.Zip(
+                        OutPortData, (value, data) => new { value, data });
+
+                    foreach (var result in query)
+                        outPuts[result.data] = result.value;
+                }
+                else
+                    outPuts[OutPortData[0]] = output;
+            }
         }
 
         [NodeName("Output")]
@@ -370,7 +404,7 @@ namespace Dynamo
                 Symbol = _tb.Text;
             }
 
-            public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
+            public override void SaveNode(XmlDocument xmlDoc, XmlElement dynEl, SaveContext context)
             {
                 //Debug.WriteLine(pd.Object.GetType().ToString());
                 XmlElement outEl = xmlDoc.CreateElement("Symbol");
@@ -378,7 +412,7 @@ namespace Dynamo
                 dynEl.AppendChild(outEl);
             }
 
-            public override void LoadElement(XmlNode elNode)
+            public override void LoadNode(XmlNode elNode)
             {
                 foreach (XmlNode subNode in elNode.ChildNodes.Cast<XmlNode>().Where(subNode => subNode.Name == "Symbol"))
                 {
@@ -486,7 +520,7 @@ namespace Dynamo
                 return result[outPort];
             }
 
-            public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
+            public override void SaveNode(XmlDocument xmlDoc, XmlElement dynEl, SaveContext context)
             {
                 //Debug.WriteLine(pd.Object.GetType().ToString());
                 XmlElement outEl = xmlDoc.CreateElement("Symbol");
@@ -494,7 +528,7 @@ namespace Dynamo
                 dynEl.AppendChild(outEl);
             }
 
-            public override void LoadElement(XmlNode elNode)
+            public override void LoadNode(XmlNode elNode)
             {
                 foreach (XmlNode subNode in elNode.ChildNodes.Cast<XmlNode>().Where(subNode => subNode.Name == "Symbol"))
                 {
@@ -552,6 +586,8 @@ namespace Dynamo
         public List<IDynamoType> InputTypes { get; internal set; }
         public List<IDynamoType> OutputTypes { get; internal set; }
         public bool RequiresRecalc { get; internal set; }
+
+        public FSharpFunc<FSharpList<FScheme.Value>, FScheme.Value> CompiledValue { get; internal set; }
 
         public IEnumerable<FunctionDefinition> Dependencies
         {

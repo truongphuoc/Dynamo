@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -30,13 +31,18 @@ namespace Dynamo.Views
             selectionCanvas.Loaded += new RoutedEventHandler(selectionCanvas_Loaded);
             DataContextChanged += new DependencyPropertyChangedEventHandler(dynWorkspaceView_DataContextChanged);
 
-            // Make new Watch3DFullscreenViewModel
-            // Make new Watch3DFullscreenView(input: viewmodel)
-            // attach to bench through mainGrid
+            this.Loaded += new RoutedEventHandler(dynWorkspaceView_Loaded);
+            this.LayoutUpdated += new EventHandler(dynWorkspaceView_LayoutUpdated);
+        }
 
-            
+        void dynWorkspaceView_LayoutUpdated(object sender, EventArgs e)
+        {
+            //Debug.WriteLine("Workspace layout updated.");
+        }
 
-            // dynSettings.Bench.sidebarGrid.Children.Add(search);
+        void dynWorkspaceView_Loaded(object sender, RoutedEventArgs e)
+        {
+            Debug.WriteLine("Workspace loaded.");
         }
 
         /// <summary>
@@ -51,6 +57,7 @@ namespace Dynamo.Views
             vm.StopDragging += new EventHandler(vm_StopDragging);
             vm.RequestCenterViewOnElement += new NodeEventHandler(CenterViewOnElement);
             vm.RequestNodeCentered += new NodeEventHandler(vm_RequestNodeCentered);
+            //vm.RequestNoteCentered += vm_RequestNoteCentered;
             //vm.UILocked += new EventHandler(LockUI);
             //vm.UIUnlocked += new EventHandler(UnlockUI);
             vm.RequestAddViewToOuterCanvas += new ViewEventHandler(vm_RequestAddViewToOuterCanvas);
@@ -58,19 +65,11 @@ namespace Dynamo.Views
 
         void selectionCanvas_Loaded(object sender, RoutedEventArgs e)
         {
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
             DrawGrid();
-
-            //Watch3DFullscreenViewModel watchFullscreenViewModel = new Watch3DFullscreenViewModel();
-            //WatchViewFullscreen fullscreen_view = new WatchViewFullscreen();
-
-            //outerCanvas.Children.Add(fullscreen_view);
-
-            //dynSettings.Bench.overlayCanvas.Children.Add(fullscreen_view);
-
-          
-            //dynWatch3DFullscreen fullscreen_watch3D = new dynWatch3DFullscreen();
-            //fullscreen_watch3D.SetupCustomUIElements(selectionCanvas);
-            //selectionCanvas.Children.Add(fullscreen_watch3D.FullscreenWatchView());
+            sw.Stop();
+            dynSettings.Controller.DynamoViewModel.Log(string.Format("{0} elapsed for drawing grid.", sw.Elapsed));
         }
 
         void vm_RequestAddViewToOuterCanvas(object sender, EventArgs e)
@@ -85,8 +84,8 @@ namespace Dynamo.Views
         {
             double x = 0;
             double y = 0;
-            dynNodeModel node = (e as NodeEventArgs).Node;
-            Dictionary<string, object> data = (e as NodeEventArgs).Data;
+            dynModelBase node = (e as ModelEventArgs).Model;
+            Dictionary<string, object> data = (e as ModelEventArgs).Data;
 
             x = outerCanvas.ActualWidth / 2.0;
             y = outerCanvas.ActualHeight / 2.0;
@@ -123,10 +122,6 @@ namespace Dynamo.Views
 
             if (!Double.IsNaN(node.Height))
                 dropPt.Y -= (node.Height / 2.0);
-
-            //MVVM: Don't do direct canvas manipulation here
-            //Canvas.SetLeft(node, dropPt.X);
-            //Canvas.SetTop(node, dropPt.Y);
 
             if (!Double.IsNaN(node.Width))
                 dropPt.X -= (node.Height / 2.0);
@@ -330,6 +325,11 @@ namespace Dynamo.Views
         {
         }
 
+        /// <summary>
+        /// Centers the view on a node by changing the workspace's CurrentOffset.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         internal void CenterViewOnElement(object sender, EventArgs e)
         {
             this.Dispatcher.BeginInvoke((Action) delegate
@@ -337,18 +337,23 @@ namespace Dynamo.Views
 
                     var vm = (DataContext as dynWorkspaceViewModel);
 
-                    var n = (e as NodeEventArgs).Node;
+                    var n = (e as ModelEventArgs).Model;
 
-                    double left = n.X;
-                    double top = n.Y;
+                    if (WorkBench != null)
+                    {
+                        var b = WorkBench.TransformToAncestor(outerCanvas);
 
-                    double x = left + n.Width/2 - outerCanvas.ActualWidth/2;
-                    double y = top + n.Height/2 - outerCanvas.ActualHeight/2;
+                        Point outerCenter = new Point(outerCanvas.ActualWidth/2, outerCanvas.ActualHeight/2);
+                        Point nodeCenterInCanvas = new Point(n.X + n.Width / 2, n.Y + n.Height / 2);
+                        Point nodeCenterInOverlay = b.Transform(nodeCenterInCanvas);
 
-                    var offset = new Point(-x, -y);
+                        double deltaX = nodeCenterInOverlay.X - outerCenter.X;
+                        double deltaY = nodeCenterInOverlay.Y - outerCenter.Y;
 
-                    vm.CurrentOffset = offset;
+                        var offset = new Point(vm.CurrentOffset.X - deltaX, vm.CurrentOffset.Y - deltaY);
 
+                        vm.CurrentOffset = offset;
+                    } 
                 });
         }
 
@@ -358,10 +363,13 @@ namespace Dynamo.Views
             //WorkBench.Children.Clear();
             double gridSpacing = 100.0;
 
+            selectionCanvas.UseLayoutRounding = true;
+
+            // draw vertical lines on grid
             for (double i = 0.0; i < selectionCanvas.ActualWidth; i += gridSpacing)
             {
                 var xLine = new Line();
-                xLine.Stroke = new SolidColorBrush(Color.FromArgb(100, 100, 100, 100));
+                xLine.Stroke = new SolidColorBrush(Color.FromArgb(255, 180, 180, 180));
                 xLine.X1 = i;
                 xLine.Y1 = 0;
                 xLine.X2 = i;
@@ -369,8 +377,27 @@ namespace Dynamo.Views
                 xLine.HorizontalAlignment = HorizontalAlignment.Left;
                 xLine.VerticalAlignment = VerticalAlignment.Center;
                 xLine.StrokeThickness = 1;
-                
                 selectionCanvas.Children.Add(xLine);
+
+                Line xLine2 = null;
+                if (i == 0.0)
+                {
+                    xLine.Stroke = new SolidColorBrush(Color.FromArgb(255, 140, 140, 140));
+
+                    xLine2 = new Line();
+                    xLine2.Stroke = new SolidColorBrush(Color.FromArgb(70, 180, 180, 180));
+                    xLine2.HorizontalAlignment = HorizontalAlignment.Left;
+                    xLine2.VerticalAlignment = VerticalAlignment.Center;
+                    xLine2.StrokeThickness = 6;
+                    xLine2.Y1 = xLine.Y1 + 6.5;
+                    xLine2.X1 = xLine.X1 + 3.5;
+                    xLine2.X2 = xLine.X2 + 3.5;
+                    xLine2.Y2 = selectionCanvas.ActualHeight;
+                    xLine2.IsHitTestVisible = false;
+                    selectionCanvas.Children.Add(xLine2);
+                    
+                }
+ 
                 //Dynamo.Controls.DragCanvas.SetCanBeDragged(xLine, false);
                 xLine.IsHitTestVisible = false;
 
@@ -381,12 +408,18 @@ namespace Dynamo.Views
                     Mode = BindingMode.OneWay,
                 };
                 xLine.SetBinding(UIElement.VisibilityProperty, binding);
+                if (xLine2 != null)
+                {
+                    xLine2.SetBinding(UIElement.VisibilityProperty, binding);
+                }
             }
+
+            // draw horizontal lines on grid
             for (double i = 0.0; i < selectionCanvas.ActualHeight; i += gridSpacing)
             {
                 var yLine = new Line();
-                yLine.Stroke = new SolidColorBrush(Color.FromArgb(100, 100, 100, 100));
-                yLine.X1 = 0;
+                yLine.Stroke = new SolidColorBrush(Color.FromArgb(255, 180, 180, 180));
+                yLine.X1 = -0.5;
                 yLine.Y1 = i;
                 yLine.X2 = selectionCanvas.ActualWidth;
                 yLine.Y2 = i;
@@ -394,6 +427,25 @@ namespace Dynamo.Views
                 yLine.VerticalAlignment = VerticalAlignment.Center;
                 yLine.StrokeThickness = 1;
                 selectionCanvas.Children.Add(yLine);
+
+                Line yLine2 = null;
+                if (i == 0.0)
+                {
+                    yLine.Stroke = new SolidColorBrush(Color.FromArgb(255, 140, 140, 140));
+
+                    yLine2 = new Line();
+                    yLine2.Stroke = new SolidColorBrush(Color.FromArgb(70, 180, 180, 180));
+                    yLine2.StrokeThickness = 6;
+                    yLine2.X1 = 0;
+                    yLine2.X2 = selectionCanvas.ActualWidth;
+                    yLine2.Y1 = yLine.Y1 + 3.5;
+                    yLine2.Y2 = yLine.Y2 + 3.5;
+                    yLine2.HorizontalAlignment = HorizontalAlignment.Left;
+                    yLine2.VerticalAlignment = VerticalAlignment.Center;
+                    yLine2.IsHitTestVisible = false;
+                    selectionCanvas.Children.Add(yLine2);
+                }
+                
                 //Dynamo.Controls.DragCanvas.SetCanBeDragged(yLine, false);
                 
                 yLine.IsHitTestVisible = false;
@@ -405,6 +457,10 @@ namespace Dynamo.Views
                     Mode = BindingMode.OneWay,
                 };
                 yLine.SetBinding(UIElement.VisibilityProperty, binding);
+                if (yLine2 != null)
+                {
+                    yLine2.SetBinding(UIElement.VisibilityProperty, binding);
+                }
             }
         }
 

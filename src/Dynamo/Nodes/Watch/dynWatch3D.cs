@@ -53,8 +53,8 @@ namespace Dynamo.Nodes
         public dynWatch3D()
         {
             var t = new PolymorphicType();
-            InPortData.Add(new PortData("IN", "Incoming geometry objects.", t));
-            OutPortData.Add(new PortData("OUT", "Watch contents, passed through", t));
+            InPortData.Add(new PortData("", "Incoming geometry objects.", t));
+            OutPortData.Add(new PortData("", "Watch contents, passed through", t));
 
             RegisterAllPorts();
 
@@ -94,24 +94,32 @@ namespace Dynamo.Nodes
             _watchView.Width = 400;
             _watchView.Height = 300;
 
-            var backgroundRect = new System.Windows.Shapes.Rectangle
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                RadiusX = 10,
-                RadiusY = 10,
-                IsHitTestVisible = false
-            };
-            var bc = new BrushConverter();
-            var strokeBrush = (Brush)bc.ConvertFrom("#313131");
+            System.Windows.Shapes.Rectangle backgroundRect = new System.Windows.Shapes.Rectangle();
+            backgroundRect.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
+            backgroundRect.VerticalAlignment = System.Windows.VerticalAlignment.Stretch;
+            //backgroundRect.RadiusX = 10;
+            //backgroundRect.RadiusY = 10;
+            backgroundRect.IsHitTestVisible = false;
+            BrushConverter bc = new BrushConverter();
+            Brush strokeBrush = (Brush)bc.ConvertFrom("#313131");
+
             backgroundRect.Stroke = strokeBrush;
             backgroundRect.StrokeThickness = 1;
             var backgroundBrush = new SolidColorBrush(Color.FromRgb(250, 250, 216));
             backgroundRect.Fill = backgroundBrush;
-            nodeUI.inputGrid.Children.Add(backgroundRect);
-            nodeUI.inputGrid.Children.Add(_watchView);
+            
+            //nodeUI.inputGrid.Children.Add(backgroundRect);
+            //nodeUI.inputGrid.Children.Add(_watchView);
 
-            CompositionTarget.Rendering += CompositionTarget_Rendering;
+            nodeUI.grid.Children.Add(backgroundRect);
+            nodeUI.grid.Children.Add(_watchView);
+            backgroundRect.SetValue(Grid.RowProperty,2);
+            backgroundRect.SetValue(Grid.ColumnSpanProperty,3);
+            _watchView.SetValue(Grid.RowProperty, 2);
+            _watchView.SetValue(Grid.ColumnSpanProperty, 3);
+            _watchView.Margin = new Thickness(5,0,5,5);
+            backgroundRect.Margin = new Thickness(5, 0, 5, 5);
+            CompositionTarget.Rendering += new EventHandler(CompositionTarget_Rendering);
         }
 
         void mi_Click(object sender, RoutedEventArgs e)

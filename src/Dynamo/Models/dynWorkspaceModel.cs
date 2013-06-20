@@ -275,12 +275,24 @@ namespace Dynamo
                 OnModified();
         }
 
+        public IEnumerable<dynNodeModel> GetHangingNodes()
+        {
+            return Nodes.Where(x => x.OutPortData.Any() && x.OutPorts.Any(y => !y.Connectors.Any()));
+        }
+
         public IEnumerable<dynNodeModel> GetTopMostNodes()
         {
             return Nodes.Where(
                 x =>
                     x.OutPortData.Any()
                     && x.OutPorts.All(y => y.Connectors.All(c => c.End.Owner is dynOutput)));
+        }
+
+        public event EventHandler Updated;
+        public void OnUpdated(EventArgs e)
+        {
+            if (Updated != null)
+                Updated(this, e);
         }
 
         #region static methods
@@ -371,7 +383,7 @@ namespace Dynamo
                     dynEl.SetAttribute("isUpstreamVisible", el.IsUpstreamVisible.ToString().ToLower());
                     dynEl.SetAttribute("lacing", el.ArgumentLacing.ToString());
 
-                    el.SaveElement(xmlDoc, dynEl);
+                    el.SaveNode(xmlDoc, dynEl, SaveContext.File);
                 }
 
                 //write only the output connectors
@@ -472,10 +484,14 @@ namespace Dynamo
 
             def.RequiresRecalc = true;
 
-            var expression = CustomNodeLoader.CompileFunction(def);
+            try
+            {
+                var expression = CustomNodeLoader.CompileFunction(def);
 
-            dynSettings.Controller.FSchemeEnvironment.DefineSymbol(
-                def.FunctionId.ToString(), expression);
+                dynSettings.Controller.FSchemeEnvironment.DefineSymbol(
+                    def.FunctionId.ToString(), expression);
+            }
+            catch { }
         }
 
         public override void OnDisplayed()

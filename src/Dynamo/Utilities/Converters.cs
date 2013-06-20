@@ -91,6 +91,52 @@ namespace Dynamo.Controls
         }
     }
 
+    public class WorkspaceBackgroundColorConverter : IValueConverter
+    {
+        public Color HomeBackgroundColor { get; set; }
+        public Color CustomBackgroundColor { get; set; }
+
+        public object Convert(object value, Type targetType, object parameter,CultureInfo culture)
+        {
+            //parameter will contain a true or false
+            //whether this is the home space
+            if ((bool)value)
+                return HomeBackgroundColor;
+
+            return CustomBackgroundColor;
+
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter,
+          CultureInfo culture)
+        {
+            return null;
+        }
+    }
+
+    public class WorkspaceBackgroundBrushConverter : IValueConverter
+    {
+        public SolidColorBrush HomeBackgroundBrush { get; set; }
+        public SolidColorBrush CustomBackgroundBrush { get; set; }
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            //parameter will contain a true or false
+            //whether this is the home space
+            if ((bool)value)
+                return HomeBackgroundBrush;
+
+            return CustomBackgroundBrush;
+
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter,
+          CultureInfo culture)
+        {
+            return null;
+        }
+    }
+
     public class BooleanToBrushConverter : IValueConverter
     {
         public SolidColorBrush TrueBrush{get;set;}
@@ -277,14 +323,11 @@ namespace Dynamo.Controls
         public object Convert(object value, Type targetType, object parameter,
             System.Globalization.CultureInfo culture)
         {
+            string menuValue = "Preview Background";
             if ((bool)value == true)
-            {
-                return "Disable preview geometry";
-            }
+                return menuValue;
             else
-            {
-                return "Enable preview geometry";
-            }
+                return menuValue;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter,
@@ -527,6 +570,21 @@ namespace Dynamo.Controls
         }
     }
 
+    public class BoolToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if ((bool)value)
+                return Visibility.Visible;
+            return Visibility.Hidden;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
     public class InverseBoolToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -609,6 +667,41 @@ namespace Dynamo.Controls
             }
 
             return "?";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    public class ZoomToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            double zoom = System.Convert.ToDouble(value);
+
+            if (zoom < .5)
+                return Visibility.Hidden;
+
+            return Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    public class PortNameToWidthConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            //if the port name is null or empty
+            if (string.IsNullOrEmpty(value.ToString()))
+                return 20;
+
+            return double.NaN;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)

@@ -24,6 +24,8 @@ namespace Dynamo.Nodes
         Error
     };
 
+    public enum SaveContext { File, Copy };
+
     public enum LacingStrategy
     {
         Disabled,
@@ -418,18 +420,25 @@ namespace Dynamo.Nodes
 
         /// <summary>
         /// Override this to implement custom save data for your Element. If overridden, you should also override
-        /// LoadElement() in order to read the data back when loaded.
+        /// LoadNode() in order to read the data back when loaded.
         /// </summary>
         /// <param name="xmlDoc">The XmlDocument representing the whole workspace containing this Element.</param>
         /// <param name="dynEl">The XmlElement representing this Element.</param>
-        public virtual void SaveElement(XmlDocument xmlDoc, XmlElement dynEl) { }
+        /// <param name="context"></param>
+        public virtual void SaveNode(System.Xml.XmlDocument xmlDoc, System.Xml.XmlElement dynEl, SaveContext context)
+        {
+
+        }
 
         /// <summary>
         /// Override this to implement loading of custom data for your Element. If overridden, you should also override
-        /// SaveElement() in order to write the data when saved.
+        /// SaveNode() in order to write the data when saved.
         /// </summary>
         /// <param name="elNode">The XmlNode representing this Element.</param>
-        public virtual void LoadElement(XmlNode elNode) { }
+        public virtual void LoadNode(System.Xml.XmlNode elNode)
+        {
+
+        }
 
         /// <summary>
         /// Forces the node to refresh it's dirty state by checking all inputs.
@@ -1434,6 +1443,21 @@ namespace Dynamo.Nodes
         }
 
         public string ElementDescription { get; set; }
+    }
+
+    [AttributeUsage(AttributeTargets.All)]
+    public class NodeTypeIdAttribute : System.Attribute
+    {
+        public string Id
+        {
+            get;
+            set;
+        }
+
+        public NodeTypeIdAttribute(string description)
+        {
+            Id = description;
+        }
     }
 
     /// <summary>

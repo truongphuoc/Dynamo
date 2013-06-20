@@ -24,7 +24,7 @@ namespace Dynamo.Nodes
     [IsInteractive(true)]
     public class dynFormula : dynNodeWithOneOutput
     {
-        private string _formula;
+        private string _formula = "";
         public string Formula
         {
             get
@@ -44,7 +44,8 @@ namespace Dynamo.Nodes
                         RaisePropertyChanged("Formula");
                         RequiresRecalc = true;
                         EnableReporting();
-                        WorkSpace.Modified();
+                        if (WorkSpace != null)
+                            WorkSpace.Modified();
                     }
                 }
             }
@@ -61,7 +62,7 @@ namespace Dynamo.Nodes
             var tb = new dynTextBox
             {
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                VerticalAlignment = System.Windows.VerticalAlignment.Top,
                 IsNumeric = false,
                 Background = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
                 DataContext = this
@@ -81,15 +82,14 @@ namespace Dynamo.Nodes
             Grid.SetRow(tb, 0);
         }
 
-        public override void SaveElement(XmlDocument xmlDoc, XmlElement dynEl)
+        public override void SaveNode(XmlDocument xmlDoc, XmlElement dynEl, SaveContext context)
         {
             dynEl.SetAttribute("formula", Formula);
         }
 
-        public override void LoadElement(XmlNode elNode)
+        public override void LoadNode(XmlNode elNode)
         {
-            Formula = elNode.Attributes["formula"].Value;
-            processFormula();
+            Formula = elNode.Attributes["formula"].Value ?? "";
         }
 
         private static readonly HashSet<string> ReservedNames = new HashSet<string>() { 

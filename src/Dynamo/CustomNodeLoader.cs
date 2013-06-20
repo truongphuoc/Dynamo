@@ -11,6 +11,9 @@ using Dynamo.FSchemeInterop.Node;
 using Dynamo.Nodes;
 using Dynamo.TypeSystem;
 using Microsoft.FSharp.Collections;
+using Dynamo.Commands;
+using NUnit.Core;
+using NUnit.Framework;
 
 namespace Dynamo.Utilities
 {
@@ -130,12 +133,18 @@ namespace Dynamo.Utilities
         }
 
         /// <summary>
-        ///     Update a FunctionDefinition amongst the loaded FunctionDefinitions
+        ///     Update a FunctionDefinition amongst the loaded FunctionDefinitions, without
+        ///     settings its path
         /// </summary>
-        /// <returns>False if SearchPath is not a valid directory, otherwise true</returns>
-        public bool SetFunctionDefinition(Guid guid, FunctionDefinition def)
+        /// <param name="guid">The custom node id</param>
+        /// <param name="def">The definition for the function</param>
+        public void SetFunctionDefinition(Guid guid, FunctionDefinition def)
         {
-            return false;
+            if (this.loadedNodes.ContainsKey(guid))
+            {
+                this.loadedNodes.Remove(guid);
+            }
+            this.loadedNodes.Add(guid, def);
         }
 
         /// <summary>
@@ -158,12 +167,13 @@ namespace Dynamo.Utilities
         /// <param name="path">The path for the node.</param>
         public void SetNodeInfo(string name, string category, Guid id, string path)
         {
-            if (Contains(name))
-                NodeNames[name] = id;
-            else
-                NodeNames.Add(name, id);
-            SetNodeCategory(id, category);
-            SetNodePath(id, path);
+            if ( this.NodeNames.ContainsKey(name) )
+            {
+                this.NodeNames.Remove(name);
+            }
+            this.NodeNames.Add(name, id);
+            this.SetNodeCategory(id, category);
+            this.SetNodePath(id, path);
         }
 
         /// <summary>
@@ -177,6 +187,15 @@ namespace Dynamo.Utilities
                 NodeCategories[id] = category;
             else
                 NodeCategories.Add(id, category);
+        }
+
+        /// <summary>
+        /// Return the default search path
+        /// </summary>
+        /// <returns>A string representing a path</returns>
+        public string GetDefaultSearchPath()
+        {
+            return SearchPath;
         }
 
         /// <summary>
@@ -601,9 +620,9 @@ namespace Dynamo.Utilities
                         return false;
 
                     el.DisableReporting();
-                    el.LoadElement(elNode); // inject the node properties from the xml
+                    el.LoadNode(elNode); // inject the node properties from the xml
 
-                    // moved this logic to LoadElement in dynFunction --SJE
+                    // moved this logic to LoadNode in dynFunction --SJE
 
                     //if (el is dynFunction)
                     //{
@@ -739,6 +758,10 @@ namespace Dynamo.Utilities
             {
                 DynamoCommands.WriteToLogCmd.Execute("There was an error opening the workbench.");
                 DynamoCommands.WriteToLogCmd.Execute(ex);
+
+                if (controller.Testing)
+                    Assert.Fail(ex.Message);
+
                 def = null;
                 return false;
             }
@@ -775,7 +798,9 @@ namespace Dynamo.Utilities
             // if we found output nodes, their inputs will serve as the function output
             if (outputs.Any())
             {
-                topMost.AddRange(outputs.Where(x => x.HasInput(0)).Select(x => x.Inputs[0]));
+                topMost.AddRange(
+                    outputs.Where(x => x.HasInput(0)).Select(x => x.Inputs[0]));
+
                 outputNames = outputs.Select(x => x.Symbol);
             }
             else
@@ -830,10 +855,7 @@ namespace Dynamo.Utilities
 
             if (topMost.Count > 1)
             {
-                //List creator
-                InputNode node = new ExternalFunctionNode(
-                    FScheme.Value.NewList,
-                    Enumerable.Range(0, topMost.Count).Select(x => x.ToString()));
+                InputNode node = new ExternalFunctionNode(FScheme.Value.NewList);
 
                 int i = 0;
                 foreach (var topNode in topMost)
@@ -841,7 +863,8 @@ namespace Dynamo.Utilities
                     outTypes.AddRange(typeDict[topNode.Item2].Outputs);
 
                     string inputName = i.ToString();
-                    
+                    node.AddInput(inputName);
+                    node.ConnectInput(inputName, new BeginNode());
                     try
                     {
                     node.ConnectInput(
@@ -863,6 +886,7 @@ namespace Dynamo.Utilities
             else
             {
                 outTypes.Add(new UnitType());
+
                 // if the custom node is empty, it will return an empty begin node (does nothing)
                 top = new BeginNode();
             }
@@ -872,7 +896,7 @@ namespace Dynamo.Utilities
             if (outputs.Any())
             {
                 var beginNode = new BeginNode();
-                List<dynNodeModel> hangingNodes = functionWorkspace.GetTopMostNodes().ToList();
+                List<dynNodeModel> hangingNodes = functionWorkspace.GetHangingNodes().ToList();
 
                 foreach (
                     var tNode in hangingNodes.Select((x, index) => new { Index = index, Node = x }))

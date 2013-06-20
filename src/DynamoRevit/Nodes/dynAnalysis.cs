@@ -228,7 +228,7 @@ namespace Dynamo.Nodes
         }
     }*/
 
-    [NodeName("Spatial Field Face")]
+    [NodeName("Spatial Field Cell")]
     [NodeCategory(BuiltinNodeCategories.ANALYZE_DISPLAY)]
     [NodeDescription("An analysis results object to be used with a spatial field manager.")]
     class dynAnalysisResults : dynNodeWithOneOutput
@@ -242,7 +242,7 @@ namespace Dynamo.Nodes
             InPortData.Add(new PortData("vals", "List of values.", typeof(Value.List)));
             InPortData.Add(new PortData("pts", "Sample locations as a list of UVs.", typeof(Value.List)));
             InPortData.Add(new PortData("sfm", "Spatial Field Manager", typeof(Value.Container)));
-            InPortData.Add(new PortData("face", "Face", typeof(Value.Container)));
+            InPortData.Add(new PortData("face", "face", typeof(Value.Container)));
             OutPortData.Add(new PortData("idx", "Analysis results object index", typeof(Value.Container)));
 
             RegisterAllPorts();
@@ -261,7 +261,7 @@ namespace Dynamo.Nodes
             Reference reference = ((Value.Container)args[3]).Item as Reference;
             idx = sfm.AddSpatialFieldPrimitive(reference);
 
-            Face face = dynRevitSettings.Doc.Document.GetElement(reference).GetGeometryObjectFromReference(reference) as Face;
+            Autodesk.Revit.DB.Face face = dynRevitSettings.Doc.Document.GetElement(reference).GetGeometryObjectFromReference(reference) as Autodesk.Revit.DB.Face;
 
             //unwrap the sample locations
             IEnumerable<UV> pts = ((Value.List)args[1]).Item.Select(
@@ -369,7 +369,7 @@ namespace Dynamo.Nodes
             Reference reference = ((Value.Container)args[3]).Item as Reference;
             idx = sfm.AddSpatialFieldPrimitive(reference);
 
-            Face face = dynRevitSettings.Doc.Document.GetElement(reference).GetGeometryObjectFromReference(reference) as Face;
+            Face face = dynRevitSettings.Doc.Document.GetElement(reference).GetGeometryObjectFromReference(reference) as Cell;
 
             //unwrap the sample locations
             IEnumerable<UV> pts = ((Value.List)args[1]).Item.Select(
@@ -502,7 +502,7 @@ namespace Dynamo.Nodes
                 loops.Add(cl);
                 Solid s = GeometryCreationUtilities.CreateExtrusionGeometry(loops, (end-start).CrossProduct(start1-start), .01);
                 
-                foreach (Face face in s.Faces)
+                foreach (Autodesk.Revit.DB.Face face in s.Faces)
                 {
                     int idx = sfm.AddSpatialFieldPrimitive(face, trf);
 

@@ -92,7 +92,7 @@ type Value =
 
 
 ///Converts an expression to a boolean value
-let private exprToBool = function
+let ValueToBool = function
     //Empty list or empty string is false, evaluate else branch.
     | List([]) | String("") -> false
     //Zero is false, evaluate else branch.
@@ -407,15 +407,15 @@ let GT =  boolMath (>) "greater-than"
 let EQ =  boolMath (=) "equals"
 
 let Not = function
-    | [expr] -> if exprToBool expr then Number(0.) else Number(1.)
+    | [expr] -> if ValueToBool expr then Number(0.) else Number(1.)
     | m -> malformed "not" <| List(m)
 
 let Xor = function
     | [a; b] ->
-        if exprToBool a then
-            if exprToBool b then Number(0.) else Number(1.)
+        if ValueToBool a then
+            if ValueToBool b then Number(0.) else Number(1.)
         else
-            if exprToBool b then Number(1.) else Number(0.)
+            if ValueToBool b then Number(1.) else Number(0.)
     | m -> malformed "xor" <| List(m)
 
 //Random Number
@@ -439,12 +439,19 @@ let IsEmpty = function [List(l)]            -> Number(if l.IsEmpty then 1. else 
 let rec private reduceLists = function
     | []     -> Seq.empty
     | [xs]   -> seq { for x in xs -> [x] }
-    | h :: t -> reduceLists t |> Seq.zip h |> Seq.map (fun (a,b) -> a::b)
+    | h :: t -> 
+        let t' = reduceLists t
+        let tcount = Seq.length t'
+        let hcount = Seq.length h
+        let tail = if tcount < hcount then Seq.skip tcount h |> Seq.map (fun x -> [x]) else Seq.skip hcount t'
+        Seq.append
+            (Seq.zip h t' |> Seq.map (fun (a,b) -> a::b))
+            tail
 
 let Map = function
     | Function(f) :: lists ->
-        List(List.map (function List(l) -> l | m -> failwith "bad map arg") lists
-                |> reduceLists |> Seq.map f |> Seq.toList)
+        List.map (function List(l) -> l | m -> failwith "bad map arg") lists
+            |> reduceLists |> Seq.map f |> Seq.toList |> List
     | m -> malformed "map" <| List(m)
 
 let FoldL = function
@@ -464,7 +471,7 @@ let FoldR = function
 
 let Filter = function
     | [Function(p); List(l)] ->
-        List(List.filter (fun x -> [x] |> p |> exprToBool) l)
+        List(List.filter (fun x -> [x] |> p |> ValueToBool) l)
     | m -> malformed "filter" <| List(m)
 
 let CartProd = function
@@ -828,7 +835,7 @@ let rec private compile (compenv : CompilerEnv) expression : (Environment -> Val
         ///Compiled else branch
         let celse = compile' else_expr
         //At runtime, evaluate the expression and select the correct branch
-        fun env -> if ccond env |> exprToBool then cthen env else celse env
+        fun env -> if ccond env |> ValueToBool then cthen env else celse env
 
     //An empty begin statement is valid, but returns a dummy
     | Begin([]) -> wrap <| Dummy("empty begin")
@@ -1119,6 +1126,7 @@ let RunTests (log : ErrorLog) =
     //Map
     case "(map (λ (x) x) '(1 2 3))" "(1 2 3)"
     case "(map append '((1) (2) (3)) '((4) (5) (6)))" "((1 4) (2 5) (3 6))"
+    case "(map list '(1 2 3) '(4 5 6) '(7 8) '(9 10 11 12))" "((1 4 7 9) (2 5 8 10) (3 6 11) (12))"
 
     //Filter
     case "(filter (λ (x) (< x 2)) '(0 2 3 4 1 6 5))" "(0 1)"

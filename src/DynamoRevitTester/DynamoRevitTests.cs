@@ -20,12 +20,13 @@ namespace DynamoRevitTests
     [TestFixture]
     internal class DynamoRevitTests
     {
-        Transaction _trans;
-        List<Element> _elements = new List<Element>();
-        string _testPath;
-        string _samplesPath;
-        string _defsPath;
-        string _emptyModelPath;
+        private Transaction _trans;
+        private List<Element> _elements = new List<Element>();
+        private string _testPath;
+        private string _samplesPath;
+        private string _defsPath;
+        private string _emptyModelPath;
+        private string _emptyModelPath1;
 
         [TestFixtureSetUp]
         public void InitFixture()
@@ -61,77 +62,31 @@ namespace DynamoRevitTests
             _defsPath = Path.GetFullPath(defsLoc);
 
             _emptyModelPath = Path.Combine(_testPath, "empty.rfa");
+
+            if (dynRevitSettings.Revit.Application.VersionNumber.Contains("2014") &&
+                dynRevitSettings.Revit.Application.VersionName.Contains("Vasari"))
+            {
+                _emptyModelPath = Path.Combine(_testPath, "emptyV.rfa");
+                _emptyModelPath1 = Path.Combine(_testPath, "emptyV1.rfa");
+            }
+            else
+            {
+                _emptyModelPath = Path.Combine(_testPath, "empty.rfa");
+                _emptyModelPath1 = Path.Combine(_testPath, "empty1.rfa");
+            }
+            
+            /*
+            _emptyModelPath = Path.Combine(_testPath, "empty.rfa");
+            _emptyModelPath1 = Path.Combine(_testPath, "empty1.rfa");
+            */
+            //open an empty model before every test
+            OpenEmptyModel();
         }
 
         [TearDown]
         //Called after each test method
         public void Cleanup()
         {
-            //dynRevitSettings.Controller.ShutDown();
-
-            //delete all the elements in the document
-            using (_trans = _trans = new Transaction(dynRevitSettings.Doc.Document))
-            {
-                _trans.Start("Cleanup test geometry.");
-
-                //get all the generic forms and dissolve them
-                //if you don't dissolve them, you don't get the original
-                //points back
-                FilteredElementCollector fecForms = new FilteredElementCollector(dynRevitSettings.Doc.Document);
-                fecForms.OfClass(typeof(GenericForm));
-
-                if (FormUtils.CanBeDissolved(dynRevitSettings.Doc.Document, fecForms.ToElementIds()))
-                {
-                    FormUtils.DissolveForms(dynRevitSettings.Doc.Document, fecForms.ToElementIds());
-                }
-
-                //TODO: can we reset the collector instead of 
-                //instantiating anew each time?
-                //this is the only way I could get this to work so
-                //that it would allow deletion of things like curves with sub-points
-
-                FilteredElementCollector fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
-                //delete curves
-                fec.OfClass(typeof(CurveElement));
-                IList<Element> elements = fec.ToElements();
-                if (elements.Count > 0)
-                    DynamoLogger.Instance.Log(string.Format("Cleaning up {0} curve elements.", elements.Count));
-
-                for (int i = elements.Count-1; i >= 0; i--)
-                {
-                    dynRevitSettings.Doc.Document.Delete(elements[i]);
-                }
-
-                fec = null;
-                fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
-                //delete ref points
-                elements.Clear();
-                fec.OfClass(typeof(ReferencePoint));
-                elements = fec.ToElements();
-                if (elements.Count > 0)
-                    DynamoLogger.Instance.Log(string.Format("Cleaning up {0} reference points.", elements.Count));
-
-                for (int i = elements.Count - 1; i >= 0; i--)
-                {
-                    dynRevitSettings.Doc.Document.Delete(elements[i]);
-                }
-
-                fec = null;
-                fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
-                //delete forms
-                elements.Clear();
-                fec.OfClass(typeof(GenericForm));
-                elements = fec.ToElements();
-                if (elements.Count > 0)
-                    DynamoLogger.Instance.Log(string.Format("Cleaning up {0} generic forms.", elements.Count));
-
-                for (int i = elements.Count - 1; i >= 0; i--)
-                {
-                    dynRevitSettings.Doc.Document.Delete(elements[i]);
-                }
-
-                _trans.Commit();
-            }
         }
 
         [Test]
@@ -350,6 +305,51 @@ namespace DynamoRevitTests
             dynSettings.Controller.DynamoViewModel.RunExpressionCommand.Execute(true);
         }
 
+        [Test]
+        public void InstParamSample()
+        {
+            string modelPath = Path.GetFullPath(Path.Combine(_samplesPath, @".\08 Get Set Family Params\inst param.rvt"));
+            SwapCurrentModel(modelPath);
+
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            string samplePath = Path.Combine(_samplesPath, @".\08 Get Set Family Params\inst param.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            dynSettings.Controller.DynamoViewModel.OpenCommand.Execute(testPath);
+            dynSettings.Controller.DynamoViewModel.RunExpressionCommand.Execute(true);
+        }
+
+        [Test]
+        public void InstParam2MassesSample()
+        {
+            string modelPath = Path.GetFullPath(Path.Combine(_samplesPath, @".\08 Get Set Family Params\inst param mass families.rvt"));
+            SwapCurrentModel(modelPath);
+
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            string samplePath = Path.Combine(_samplesPath, @".\08 Get Set Family Params\inst param 2 masses.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            dynSettings.Controller.DynamoViewModel.OpenCommand.Execute(testPath);
+            dynSettings.Controller.DynamoViewModel.RunExpressionCommand.Execute(true);
+        }
+
+        [Test]
+        public void InstParam2MassesDrivingEachOtherSample()
+        {
+            string modelPath = Path.GetFullPath(Path.Combine(_samplesPath, @".\08 Get Set Family Params\inst param mass families.rvt"));
+            SwapCurrentModel(modelPath);
+
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            string samplePath = Path.Combine(_samplesPath, @".\08 Get Set Family Params\inst param 2 masses driving each other.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            dynSettings.Controller.DynamoViewModel.OpenCommand.Execute(testPath);
+            dynSettings.Controller.DynamoViewModel.RunExpressionCommand.Execute(true);
+        }
+
         #region Python samples
         /*
         [Test]
@@ -487,7 +487,7 @@ namespace DynamoRevitTests
             Assert.AreEqual(typeSelNode.Items.Count, count);
 
             //assert that the selected index is correct
-            Assert.AreEqual(typeSelNode.SelectedIndex, count - 1);
+            Assert.AreEqual(typeSelNode.SelectedIndex, 3);
 
             //now try and set the selected index to something
             //greater than what is possible
@@ -581,51 +581,7 @@ namespace DynamoRevitTests
         }
 
         [Test]
-        public void SwitchDocuments()
-        {
-            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
-
-            //open the workflow and run the expression
-            string testPath = Path.Combine(_testPath, "ReferencePointTest.dyn");
-            dynSettings.Controller.RunCommand(vm.OpenCommand,testPath);
-            Assert.AreEqual(3, dynSettings.Controller.DynamoModel.Nodes.Count());
-            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
-
-            //verify we have a reference point
-            FilteredElementCollector fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
-            fec.OfClass(typeof(ReferencePoint));
-            Assert.AreEqual(1, fec.ToElements().Count());
-
-            //open a new document and activate it
-            UIDocument initialDoc = dynRevitSettings.Revit.ActiveUIDocument;
-            string shellPath = Path.Combine(_testPath, @"empty1.rfa");
-            dynRevitSettings.Revit.OpenAndActivateDocument(shellPath);
-            initialDoc.Document.Close(false);
-            
-            //assert that the doc is set on the controller
-            Assert.IsNotNull(dynRevitSettings.Doc.Document);
-
-            //update the double node so the graph reevaluates
-            var doubleNodes = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is dynBasicInteractive<double>);
-            dynBasicInteractive<double> node = doubleNodes.First() as dynBasicInteractive<double>;
-            node.Value = node.Value + .1;
-
-            //run the expression again
-            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
-            fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
-            fec.OfClass(typeof(ReferencePoint));
-            Assert.AreEqual(1, fec.ToElements().Count());
-
-            //finish out by restoring the original
-            initialDoc = dynRevitSettings.Revit.ActiveUIDocument;
-            shellPath = Path.Combine(_testPath, @"empty.rfa");
-            dynRevitSettings.Revit.OpenAndActivateDocument(shellPath);
-            initialDoc.Document.Close(false);
-
-        }
-
-        [Test]
-        public void CurveByPoints()
+        public void CurveByPointsNode()
         {
             DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
 
@@ -682,7 +638,7 @@ namespace DynamoRevitTests
         }
 
         [Test]
-        public void XYZFromReferencePoint()
+        public void XYZFromReferencePointNode()
         {
             DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
 
@@ -712,7 +668,7 @@ namespace DynamoRevitTests
         }
 
         [Test]
-        public void CurveByPointsByLine()
+        public void CurveByPointsByLineNode()
         {
             //this sample creates a geometric line
             //then creates a curve by points from that line
@@ -741,6 +697,172 @@ namespace DynamoRevitTests
             fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
             fec.OfClass(typeof(ReferencePoint));
             Assert.AreEqual(2, fec.ToElements().Count);
+        }
+
+        [Test]
+        public void BlendSolid()
+        {
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            string samplePath = Path.Combine(_testPath, @".\BlendSolid.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            dynSettings.Controller.RunCommand(vm.OpenCommand, testPath);
+            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+
+            var blendNode = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is CreateBlendGeometry).First();
+            dynSolidBase nodeAsSolidBase = (dynSolidBase)blendNode;
+            Solid result = nodeAsSolidBase.resultingSolidForTestRun().First();
+            double volumeMin = 3700000.0;
+            double volumeMax = 3900000.0;
+            double actualVolume = result.Volume;
+            Assert.Greater(actualVolume, volumeMin);
+            Assert.Less(actualVolume, volumeMax);
+        }
+
+        [Test]
+        public void RevolveSolid()
+        {
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            string samplePath = Path.Combine(_testPath, @".\RevolveSolid.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            dynSettings.Controller.RunCommand(vm.OpenCommand, testPath);
+            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+
+            var revolveNode = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is CreateRevolvedGeometry).First();
+            dynSolidBase nodeAsSolidBase = (dynSolidBase)revolveNode;
+            Solid result = nodeAsSolidBase.resultingSolidForTestRun().First();
+            double volumeMin = 13300.0;
+            double volumeMax = 13550.0;
+            double actualVolume = result.Volume;
+            Assert.Greater(actualVolume, volumeMin);
+            Assert.Less(actualVolume, volumeMax);
+        }
+
+        [Test]
+        public void SweepToMakeSolid()
+        {
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            string samplePath = Path.Combine(_testPath, @".\SweepToMakeSolid.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            dynSettings.Controller.RunCommand(vm.OpenCommand, testPath);
+            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+
+            var sweepNode = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is CreateSweptGeometry).First();
+            dynSolidBase nodeAsSolidBase = (dynSolidBase)sweepNode;
+            Solid result = nodeAsSolidBase.resultingSolidForTestRun().First();
+            double volumeMin = 11800.0;
+            double volumeMax = 12150.0;
+            double actualVolume = result.Volume;
+            Assert.Greater(actualVolume, volumeMin);
+            Assert.Less(actualVolume, volumeMax);
+        }
+
+        [Test]
+        public void SolidBySkeleton()
+        {
+            if (!dynRevitSettings.Revit.Application.VersionNumber.Contains("2013") &&
+                             dynRevitSettings.Revit.Application.VersionName.Contains("Vasari"))
+            {
+                 DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+                 string samplePath = Path.Combine(_testPath, @".\SolidBySkeleton.dyn");
+                 string testPath = Path.GetFullPath(samplePath);
+
+                 dynSettings.Controller.RunCommand(vm.OpenCommand, testPath);
+                 dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+
+                 var skeletonNode = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is dynSkinCurveLoops).First();
+                 dynSolidBase nodeAsSolidBase = (dynSolidBase)skeletonNode;
+                 Solid result = nodeAsSolidBase.resultingSolidForTestRun().First();
+                 double volumeMin = 82500.0;
+                 double volumeMax = 84500.0;
+                 double actualVolume = result.Volume;
+                 Assert.Greater(actualVolume, volumeMin);
+                 Assert.Less(actualVolume, volumeMax);
+             }
+        }
+
+        [Test]
+        public void AdaptiveComponentsNode()
+        {
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            string path = Path.Combine(_testPath, @".\AdaptiveComponents\AdaptiveComponentSample.rfa");
+            string modelPath = Path.GetFullPath(path);
+            SwapCurrentModel(modelPath);
+
+            string samplePath = Path.Combine(_testPath, @".\AdaptiveComponents\AdaptiveComponents.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            dynSettings.Controller.RunCommand(vm.OpenCommand, testPath);
+
+            //the .dyn has the slider set at 5. let's make sure that
+            //if you set the slider to something else before running, that it get the correct number
+            var slider = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is dynDoubleSliderInput).First();
+            ((dynBasicInteractive<double>)slider).Value = 1;
+
+            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+
+            //get all the family instances in the document
+            var acs = GetAllFamilyInstancesWithTypeName("3PointAC_wireTruss");
+            Assert.AreEqual(1, acs.Count());
+
+            //change the number slider
+            ((dynBasicInteractive<double>)slider).Value = 3;
+
+            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+            acs = GetAllFamilyInstancesWithTypeName("3PointAC_wireTruss");
+            Assert.AreEqual(3, acs.Count());
+
+        }
+
+        [Test]
+        public void SwitchDocuments()
+        {
+            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
+
+            //open the workflow and run the expression
+            string testPath = Path.Combine(_testPath, "ReferencePointTest.dyn");
+            dynSettings.Controller.RunCommand(vm.OpenCommand, testPath);
+            Assert.AreEqual(3, dynSettings.Controller.DynamoModel.Nodes.Count());
+            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+
+            //verify we have a reference point
+            FilteredElementCollector fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
+            fec.OfClass(typeof(ReferencePoint));
+            Assert.AreEqual(1, fec.ToElements().Count());
+
+            //open a new document and activate it
+            UIDocument initialDoc = dynRevitSettings.Revit.ActiveUIDocument;
+            string shellPath = Path.Combine(_testPath, @"empty1.rfa");
+            dynRevitSettings.Revit.OpenAndActivateDocument(shellPath);
+            initialDoc.Document.Close(false);
+
+            //assert that the doc is set on the controller
+            Assert.IsNotNull(dynRevitSettings.Doc.Document);
+
+            //update the double node so the graph reevaluates
+            var doubleNodes = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is dynBasicInteractive<double>);
+            dynBasicInteractive<double> node = doubleNodes.First() as dynBasicInteractive<double>;
+            node.Value = node.Value + .1;
+
+            //run the expression again
+            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
+            fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
+            fec.OfClass(typeof(ReferencePoint));
+            Assert.AreEqual(1, fec.ToElements().Count());
+
+            //finish out by restoring the original
+            initialDoc = dynRevitSettings.Revit.ActiveUIDocument;
+            shellPath = Path.Combine(_testPath, @"empty.rfa");
+            dynRevitSettings.Revit.OpenAndActivateDocument(shellPath);
+            initialDoc.Document.Close(false);
+
         }
 
         [Test]
@@ -789,51 +911,24 @@ namespace DynamoRevitTests
             Assert.AreEqual(20, fec.ToElements().Count());
         }
 
-        [Test]
-        public void AdaptiveComponents()
-        {
-            DynamoViewModel vm = dynSettings.Controller.DynamoViewModel;
-
-            string path = Path.Combine(_testPath, @".\AdaptiveComponents\AdaptiveComponentSample.rfa");
-            string modelPath = Path.GetFullPath(path);
-            SwapCurrentModel(modelPath);
-
-            string samplePath = Path.Combine(_testPath, @".\AdaptiveComponents\AdaptiveComponents.dyn");
-            string testPath = Path.GetFullPath(samplePath);
-
-            dynSettings.Controller.RunCommand(vm.OpenCommand, testPath);
-
-            //the .dyn has the slider set at 5. let's make sure that
-            //if you set the slider to something else before running, that it get the correct number
-            var slider = dynSettings.Controller.DynamoModel.Nodes.Where(x => x is dynDoubleSliderInput).First();
-            ((dynBasicInteractive<double>)slider).Value = 1;
-
-            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
-
-            //get all the family instances in the document
-            var acs = GetAllFamilyInstancesWithTypeName("3PointAC_wireTruss");
-            Assert.AreEqual(1, acs.Count());
-
-            //change the number slider
-            ((dynBasicInteractive<double>)slider).Value = 3;
-
-            dynSettings.Controller.RunCommand(vm.RunExpressionCommand, true);
-            acs = GetAllFamilyInstancesWithTypeName("3PointAC_wireTruss");
-            Assert.AreEqual(3, acs.Count());
-
-            //reset the original model
-            SwapCurrentModel(_emptyModelPath);
-        }
-        
         /// <summary>
         /// Opens and activates a new model, and closes the old model.
         /// </summary>
-        private static void SwapCurrentModel(string modelPath)
+        private void SwapCurrentModel(string modelPath)
         {
             Document initialDoc = dynRevitSettings.Doc.Document;
             dynRevitSettings.Revit.OpenAndActivateDocument(modelPath);
             initialDoc.Close(false);
-       
+        }
+
+        private void OpenEmptyModel()
+        {
+            Document initialDoc = dynRevitSettings.Doc.Document;
+            UIDocument empty1 = dynRevitSettings.Revit.OpenAndActivateDocument(_emptyModelPath1);
+            initialDoc.Close(false);
+
+            dynRevitSettings.Revit.OpenAndActivateDocument(_emptyModelPath);
+            empty1.Document.Close(false);
         }
 
         /// <summary>
