@@ -606,9 +606,9 @@ namespace Dynamo.Nodes
             return SaveResult ? base.Compile(portNames) : new FunctionNode("map", portNames);
         }
 
-        public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
+        public override Value Evaluate(FSharpList<Value> args)
         {
-            return ((FScheme.Value.Function)Controller.FSchemeEnvironment.LookupSymbol("map"))
+            return ((Value.Function)Controller.FSchemeEnvironment.LookupSymbol("map"))
                 .Item.Invoke(args);
         }
     }
@@ -698,9 +698,9 @@ namespace Dynamo.Nodes
                        : new FunctionNode("cartesian-product", portNames);
         }
 
-        public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
+        public override Value Evaluate(FSharpList<Value> args)
         {
-            return ((FScheme.Value.Function)
+            return ((Value.Function)
                     Controller.FSchemeEnvironment.LookupSymbol("cartesian-product"))
                 .Item.Invoke(args);
         }
@@ -1289,18 +1289,72 @@ namespace Dynamo.Nodes
         }
     }
 
+    //[NodeName("Flatten Completely")]
+    //[NodeCategory(BuiltinNodeCategories.CORE_LISTS)]
+    //[NodeDescription("Flatten nested lists into one list.")]
+    //public class dynFlattenList : dynNodeWithOneOutput
+    //{
+    //    public dynFlattenList()
+    //    {
+    //        var a = new PolymorphicType();
+
+    //        InPortData.Add(
+    //            new PortData("list", "The list of lists to flatten.", new ListType(new ListType(a))));
+    //        OutPortData.Add(new PortData("list", "The flattened list.", new ListType(a)));
+
+    //        RegisterAllPorts();
+
+    //        ArgumentLacing = LacingStrategy.Disabled;
+    //    }
+
+    //    internal static IEnumerable<Value> Flatten(IEnumerable<Value> list, ref int amt)
+    //    {
+    //        while (amt != 0)
+    //        {
+    //            bool keepFlattening = false;
+
+    //            list = list.SelectMany<Value, Value>(
+    //                x =>
+    //                {
+    //                    if (x is Value.List)
+    //                    {
+    //                        keepFlattening = true;
+    //                        return (x as Value.List).Item;
+    //                    }
+    //                    return new[] { x };
+    //                }).ToList();
+
+    //            if (keepFlattening)
+    //                amt--;
+    //            else
+    //                break;
+    //        }
+    //        return list;
+    //    }
+
+    //    public override Value Evaluate(FSharpList<Value> args)
+    //    {
+    //        if (!args[0].IsList)
+    //            throw new Exception("A list is required to flatten.");
+
+    //        IEnumerable<Value> list = ((Value.List)args[0]).Item;
+
+    //        int amt = -1;
+    //        return Value.NewList(Utils.SequenceToFSharpList(Flatten(list, ref amt)));
+    //    }
+    //}
+
     [NodeName("Flatten")]
     [NodeCategory(BuiltinNodeCategories.CORE_LISTS)]
-    [NodeDescription("Flatten a list of lists into one list.")]
-    public class dynFlattenList : dynNodeWithOneOutput
+    [NodeDescription("Flatten nested lists into one list.")]
+    public class dynFlattenListAmt : dynNodeWithOneOutput
     {
-        public dynFlattenList()
+        public dynFlattenListAmt()
         {
-            var a = new PolymorphicType();
+            var t = new ListType(new PolymorphicType());
 
-            InPortData.Add(
-                new PortData("list", "The list of lists to flatten.", new ListType(new ListType(a))));
-            OutPortData.Add(new PortData("list", "The flattened list.", new ListType(a)));
+            InPortData.Add(new PortData("list", "The list of lists to flatten.", new ListType(t)));
+            OutPortData.Add(new PortData("list", "The flattened list.", t));
 
             RegisterAllPorts();
 
@@ -1312,10 +1366,11 @@ namespace Dynamo.Nodes
             if (!args[0].IsList)
                 throw new Exception("A list is required to flatten.");
 
-            FSharpList<Value> list = ((Value.List)args[0]).Item;
-            var vals = list.ToList().SelectMany(x => ((Value.List)x).Item);
+            IEnumerable<Value> list = ((Value.List)args[0]).Item;
 
-            return Value.NewList(Utils.SequenceToFSharpList(vals));
+            return Value.NewList(
+                Utils.SequenceToFSharpList(
+                    list.Cast<Value.List>().SelectMany(x => x.Item)));
         }
     }
 

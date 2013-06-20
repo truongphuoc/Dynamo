@@ -5,7 +5,7 @@ using System.Windows.Media.Media3D;
 
 using Autodesk.Revit;
 using Autodesk.Revit.DB;
-
+using Dynamo.TypeSystem;
 using Microsoft.FSharp.Collections;
 
 using Value = Dynamo.FScheme.Value;
@@ -23,25 +23,24 @@ namespace Dynamo.Nodes
     {
         public dynCurveFaceIntersection()
         {
-            InPortData.Add(new PortData("crv", "The specified curve to intersect with this face.", typeof(Value.Container)));
-            InPortData.Add(new PortData("face", "The face from which to calculate the intersection.", typeof(Value.Container)));
+            InPortData.Add(new PortData("crv", "The specified curve to intersect with this face.", new ObjectType(typeof(Curve))));
+            InPortData.Add(new PortData("face", "The face from which to calculate the intersection.", new ObjectType(typeof(Face))));
 
-            OutPortData.Add(new PortData("result", "The set comparison result.", typeof(Value.String)));
+            OutPortData.Add(new PortData("result", "The set comparison result.", new StringType()));
             OutPortData.Add(new PortData("xsects", "A list of intersection information. {XYZ point, UV point, curve parameter, edge object, edge parameter}", typeof(Value.List)));
 
             RegisterAllPorts();
         }
 
-        public override Value Evaluate(FSharpList<Value> args)
+        public override void Evaluate(FSharpList<Value> args, Dictionary<PortData, Value> outPuts)
         {
             var crv = (Curve)((Value.Container)args[0]).Item;
-            var face = (Autodesk.Revit.DB.Face)((Value.Container)args[1]).Item;
+            var face = (Face)((Value.Container)args[1]).Item;
 
-            IntersectionResultArray xsects = new IntersectionResultArray();
+            IntersectionResultArray xsects;
             SetComparisonResult result = face.Intersect(crv, out xsects);
 
-            var xsect_results = FSharpList<Value>.Empty;
-            var results = FSharpList<Value>.Empty;
+            var xsectResults = FSharpList<Value>.Empty;
             if (xsects != null)
             {
                 foreach (IntersectionResult ir in xsects)
@@ -59,12 +58,12 @@ namespace Dynamo.Nodes
                     xsect = FSharpList<Value>.Cons(Value.NewNumber(ir.Parameter), xsect);
                     xsect = FSharpList<Value>.Cons(Value.NewContainer(ir.UVPoint), xsect);
                     xsect = FSharpList<Value>.Cons(Value.NewContainer(ir.XYZPoint), xsect);
-                    xsect_results = FSharpList<Value>.Cons(Value.NewList(xsect), xsect_results);
+                    xsectResults = FSharpList<Value>.Cons(Value.NewList(xsect), xsectResults);
                 }
             }
-            results = FSharpList<Value>.Cons(Value.NewList(xsect_results), results);
-            results = FSharpList<Value>.Cons(Value.NewString(result.ToString()), results);
-            return Value.NewList(results);
+
+            outPuts[OutPortData[0]] = Value.NewString(result.ToString());
+            outPuts[OutPortData[1]] = Value.NewList(xsectResults);
         }
     }
 
@@ -75,25 +74,24 @@ namespace Dynamo.Nodes
     {
         public dynCurveCurveIntersection()
         {
-            InPortData.Add(new PortData("crv1", "The curve with which to intersect.", typeof(Value.Container)));
-            InPortData.Add(new PortData("crv2", "The intersecting curve.", typeof(Value.Container)));
+            InPortData.Add(new PortData("crv1", "The curve with which to intersect.", new ObjectType(typeof(Curve))));
+            InPortData.Add(new PortData("crv2", "The intersecting curve.", new ObjectType(typeof(Curve))));
 
-            OutPortData.Add(new PortData("result", "The set comparison result.", typeof(Value.String)));
+            OutPortData.Add(new PortData("result", "The set comparison result.", new StringType()));
             OutPortData.Add(new PortData("xsects", "A list of intersection information. {XYZ point, curve 1 parameter, curve 2 parameter}", typeof(Value.List)));
 
             RegisterAllPorts();
         }
 
-        public override Value Evaluate(FSharpList<Value> args)
+        public override void Evaluate(FSharpList<Value> args, Dictionary<PortData, Value> outPuts)
         {
             var crv1 = (Curve)((Value.Container)args[0]).Item;
             var crv2 = (Curve)((Value.Container)args[1]).Item;
 
-            IntersectionResultArray xsects = new IntersectionResultArray();
+            IntersectionResultArray xsects;
             SetComparisonResult result = crv1.Intersect(crv2, out xsects);
-            var results = FSharpList<Value>.Empty;
 
-            var xsect_results = FSharpList<Value>.Empty;
+            var xsectResults = FSharpList<Value>.Empty;
             if (xsects != null)
             {
                 foreach (IntersectionResult ir in xsects)
@@ -102,16 +100,15 @@ namespace Dynamo.Nodes
                     xsect = FSharpList<Value>.Cons(Value.NewNumber(ir.UVPoint.U), xsect);
                     xsect = FSharpList<Value>.Cons(Value.NewNumber(ir.UVPoint.V), xsect);
                     xsect = FSharpList<Value>.Cons(Value.NewContainer(ir.XYZPoint), xsect);
-                    xsect_results = FSharpList<Value>.Cons(Value.NewList(xsect), xsect_results);
+                    xsectResults = FSharpList<Value>.Cons(Value.NewList(xsect), xsectResults);
 
                     pts.Add(ir.XYZPoint);
                 }
                 
             }
-            results = FSharpList<Value>.Cons(Value.NewList(xsect_results), results);
-            results = FSharpList<Value>.Cons(Value.NewString(result.ToString()), results);
 
-            return Value.NewList(results);
+            outPuts[OutPortData[0]] = Value.NewString(result.ToString());
+            outPuts[OutPortData[1]] = Value.NewList(xsectResults);
         }
 
         #region IDrawable Interface

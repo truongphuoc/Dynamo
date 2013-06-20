@@ -113,7 +113,7 @@ namespace Dynamo.Nodes
         /// </summary>
         public bool IsCustomFunction
         {
-            get { return GetType().IsAssignableFrom(typeof(dynFunction)); }
+            get { return this is dynFunction; }
         }
 
         public bool IsVisible

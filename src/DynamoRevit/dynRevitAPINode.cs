@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Reflection;
+using Autodesk.Revit.DB;
+using Dynamo.TypeSystem;
 using Dynamo.Utilities;
 using Dynamo.Connectors;
 using Dynamo.Revit;
@@ -82,7 +84,7 @@ namespace Dynamo.Nodes
     {
         public dynRevitDocument()
         {
-            OutPortData.Add(new PortData("doc", "The active Revit doc.", typeof(Value.Container)));
+            OutPortData.Add(new PortData("doc", "The active Revit doc.", new ObjectType(typeof(Document))));
             RegisterAllPorts();
         }
 

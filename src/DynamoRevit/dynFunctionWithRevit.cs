@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Dynamo.Connectors;
 using Dynamo.Nodes;
 using Microsoft.FSharp.Collections;
 using Dynamo.Utilities;
@@ -15,18 +16,15 @@ namespace Dynamo.Nodes
     {
         internal ElementsContainer ElementsContainer = new ElementsContainer();
 
-        protected internal dynFunctionWithRevit(IEnumerable<string> inputs, IEnumerable<string> outputs, FunctionDefinition functionDefinition)
+        protected dynFunctionWithRevit(IEnumerable<string> inputs, IEnumerable<string> outputs, FunctionDefinition functionDefinition)
             : base(inputs, outputs, functionDefinition)
         { }
 
-        public dynFunctionWithRevit() { }
-
-        public override FScheme.Value Evaluate(FSharpList<FScheme.Value> args)
+        public override void Evaluate(FSharpList<FScheme.Value> args, Dictionary<PortData, FScheme.Value> outPuts)
         {
             dynRevitSettings.ElementsContainers.Push(ElementsContainer);
-            var result = base.Evaluate(args);
+            base.Evaluate(args, outPuts);
             dynRevitSettings.ElementsContainers.Pop();
-            return result;
         }
 
         public override void SaveNode(XmlDocument xmlDoc, XmlElement dynEl, SaveContext context)
@@ -128,8 +126,7 @@ namespace Dynamo.Nodes
                    }
                    dynRevitSettings.Controller.EndTransaction();
                    WorkSpace.Modified();
-               },
-               true
+               }
             );
         }
     }

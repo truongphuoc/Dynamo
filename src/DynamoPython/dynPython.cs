@@ -217,12 +217,8 @@ namespace Dynamo.Nodes
             else
                 RenderDescription.ClearAll();
 
-<<<<<<< HEAD
-            PythonEngine.Drawing(_lastEvalValue, RenderDescription);
-=======
-            if(lastEvalValue != null)
-                PythonEngine.Drawing(lastEvalValue, this.RenderDescription);
->>>>>>> origin/master
+            if (_lastEvalValue != null)
+                PythonEngine.Drawing(_lastEvalValue, this.RenderDescription);
         }
     }
 
