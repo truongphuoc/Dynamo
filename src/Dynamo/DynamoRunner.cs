@@ -130,7 +130,7 @@ namespace Dynamo
                 foreach (dynNodeModel node in topElements)
                 {
                     foreach (var j in Enumerable.Range(0, node.OutPortData.Count))
-                        node.TypeCheck(j, typeEnv, typeDict);
+                        node.TypeCheck(j, typeEnv, TODO, typeDict);
                 }
 
                 var buildDict = new Dictionary<dynNodeModel, Dictionary<int, INode>>();

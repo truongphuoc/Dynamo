@@ -17,28 +17,6 @@ using Microsoft.FSharp.Core;
 
 namespace Dynamo.Nodes
 {
-    public enum ElementState
-    {
-        Dead,
-        Active,
-        Error
-    };
-
-    public enum SaveContext { File, Copy };
-
-    public enum LacingStrategy
-    {
-        Disabled,
-        First,
-        Shortest,
-        Longest,
-        CrossProduct
-    };
-
-    public delegate void PortsChangedHandler(object sender, EventArgs e);
-
-    public delegate void DispatchedToUIThreadHandler(object sender, UIDispatcherEventArgs e);
-
     public abstract class dynNodeModel : dynModelBase
     {
         #region Abstract Members
@@ -189,6 +167,29 @@ namespace Dynamo.Nodes
                 _outPorts = value;
                 RaisePropertyChanged("OutPorts");
             }
+        }
+
+        private readonly List<List<FunctionType>> _overloads = new List<List<FunctionType>>();
+
+        public List<FunctionType> GetOverloads(int index)
+        {
+            return _overloads.Count > index
+                ? _overloads[index]
+                : new List<FunctionType>
+                  {
+                      new FunctionType(
+                          Enumerable.Range(0, InPortData.Count).Select(GetInputType), 
+                          GetOutputType(index))
+                  };
+        }
+
+        public void AddOverload(Dictionary<PortData, IDynamoType> portTypeMapping)
+        {
+            _overloads.Add(
+                OutPortData.Select(
+                    outData =>
+                        new FunctionType(InPortData.Select(x => portTypeMapping[x]), portTypeMapping[outData]))
+                           .ToList());
         }
 
         /// <summary>
@@ -354,7 +355,7 @@ namespace Dynamo.Nodes
 
         private bool _laced;
 
-        public dynNodeModel()
+        protected dynNodeModel()
         {
             InPortData = new ObservableCollection<PortData>();
             OutPortData = new ObservableCollection<PortData>();
@@ -466,101 +467,168 @@ namespace Dynamo.Nodes
             return OutPortData[port].PortType;
         }
 
-        internal virtual IDynamoType TypeCheck(
-            int port, FSharpMap<string, TypeScheme> env,
-            Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
+        static FSharpMap<GuessType, IDynamoType> MergeGuessEnvironments(
+            IEnumerable<FSharpMap<GuessType, IDynamoType>> environments)
         {
-            //All the types of the InPorts
-            List<IDynamoType> inputTypes =
-                    Enumerable.Range(0, InPortData.Count).Select(GetInputType).ToList();
-            //Type of the requested OutPort
-            IDynamoType outputType = GetOutputType(port);
+            return environments.Aggregate(
+                MapModule.Empty<GuessType, IDynamoType>(),
+                (a, env) =>
+                    env.Aggregate(
+                        a,
+                        (current, pair) => 
+                            current.Add(
+                                pair.Key, 
+                                current.ContainsKey(pair.Key) 
+                                    ? TypeUnion.MakeUnion(current[pair.Key], pair.Value) 
+                                    : pair.Value)));
+        }
 
+        internal virtual List<TypeCheckResult> TypeCheck(int port, FSharpMap<string, TypeScheme> env, FSharpMap<GuessType, IDynamoType> guessEnv, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
+        {
+            var result = new List<TypeCheckResult>();
+            
             //Type Guesses corresponding to Polymorphic Types
             var polyDict = new Dictionary<PolymorphicType, IDynamoType>();
 
             var mapPorts = new List<int>();
 
-            IDynamoType result;
-
             //Are all inputs connected?
             if (Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
-                var definedType = (FunctionType)TypeScheme.Generalize(
-                    env,
-                    new FunctionType(
-                        inputTypes.Select(x => x.InstantiatePolymorphicTypes(polyDict)),
-                        outputType.InstantiatePolymorphicTypes(polyDict)))
-                                                          .Instantiate();
+                var expectedTypes = new List<Tuple<int, IDynamoType>>();
+                foreach (var inPortIndex in Enumerable.Range(0, InPortData.Count))
+                {
+                    var input = Inputs[inPortIndex];
+                    var check = input.Item2.TypeCheck(input.Item1, env, guessEnv, typeDict);
 
-                var query = definedType.Inputs.Zip(
-                    Enumerable.Range(0, InPortData.Count).Select(
-                        x =>
+                    //TODO: don't merge, check each individually and add each to results
+                    //      this will solve the following case:
+                    //          (lambda (x) (id (if (is-string? x) (strlen x) (to-string x))))
+                    guessEnv = MergeGuessEnvironments(check.Select(y => y.GuessEnv));
+
+                    expectedTypes.Add(
+                        Tuple.Create(
+                            inPortIndex, 
+                            TypeUnion.MakeUnion(check.Select(y => y.Type))));
+                }
+
+                foreach (var overload in _overloads.Select(x => x[port]))
+                {
+                    var definedType = 
+                        (FunctionType)TypeScheme.Generalize(
+                            env, 
+                            overload.InstantiatePolymorphicTypes(polyDict)).Instantiate();
+
+                    var newGuessEnv = guessEnv;
+                    bool success = true;
+
+                    var query = definedType.Inputs.Zip(
+                        expectedTypes, 
+                        (d, e) => new 
+                        { 
+                            Defined = d, 
+                            Index = e.Item1, 
+                            Expected = e.Item2 
+                        });
+
+                    foreach (var inputPair in query)
+                    {
+                        var unity = new UnificationResult();
+                        var unification = inputPair.Defined.Unify(
+                            inputPair.Expected, newGuessEnv, unity);
+                        if (FSharpOption<TypeCheckResult>.get_IsSome(unification))
                         {
-                            Tuple<int, dynNodeModel> input = Inputs[x];
-                            return Tuple.Create(
-                                x, input.Item2.TypeCheck(input.Item1, env, typeDict));
-                        }),
-                    (d, e) => new { Defined = d, Expected = e.Item2, Index = e.Item1 });
-
-                foreach (var inputPair in query)
-                {
-                    var unity = new UnificationResult();
-                    if (inputPair.Defined.Unify(inputPair.Expected, unity))
-                    {
-                        //finalInputTypes.Add(inputPair.Defined.Unwrap());
-                        mapPorts.Add(unity.ReductionAmount);
+                            //finalInputTypes.Add(inputPair.Defined.Unwrap());
+                            mapPorts.Add(unity.ReductionAmount);
+                            newGuessEnv = unification.Value.GuessEnv;
+                        }
+                        else
+                        {
+                            success = false;
+                            break;
+                        }
                     }
-                    else
+
+                    if (success)
                     {
-                        Error(
-                            "Defined type for port \"" + InPortData[inputPair.Index].NickName
-                            + "\" (" + unity.Defined + ") does not match connected type "
-                            + unity.Expected);
-                        throw new Exception("Type check failed.");
+                        //TODO: Dimension Difference > 1
+                        result.Add(
+                            new TypeCheckResult
+                            {
+                                Type =
+                                    mapPorts.Any(x => x != 0)
+                                        ? new ListType(definedType.Output)
+                                        : definedType.Output,
+                                GuessEnv = newGuessEnv
+                            });
                     }
-                }
-
-                var t = new GuessType();
-
-                var rUnity = new UnificationResult();
-                if (definedType.Output.Unify(t, rUnity))
-                {
-                    //TODO: Dimension Difference > 1
-                    result = mapPorts.Any(x => x != 0) ? new ListType(t.Unwrap()) : t.Unwrap();
-                }
-                else
-                {
-                    throw new Exception("Type check failed.");
                 }
             }
             else
             {
-                var inputs = new List<IDynamoType>();
+                var overloads = new List<FunctionType>();
 
-                foreach (int inDataIdx in InPortData.Select((_, i) => i))
+                var connectedInputTypes = new Dictionary<int, IDynamoType>();      
+          
+                foreach (var input in InPortData.Select((_, i) => i).Where(HasInput).Select(i => Inputs[i]))
                 {
-                    Tuple<int, dynNodeModel> input;
-                    if (TryGetInput(inDataIdx, out input))
-                    {
-                        var unity = new UnificationResult();
-                        if (input.Item2.TypeCheck(input.Item1, env, typeDict)
-                                 .Unify(GetInputType(inDataIdx), unity))
-                        {
-                            mapPorts.Add(unity.ReductionAmount);
-                        }
-                        else
-                            throw new Exception("Type check failed.");
-                    }
-                    inputs.Add(GetInputType(inDataIdx));
+                    var check = input.Item2.TypeCheck(input.Item1, env, guessEnv, typeDict);
+
+                    guessEnv = MergeGuessEnvironments(check.Select(y => y.GuessEnv));
+
+                    connectedInputTypes[input.Item1] = TypeUnion.MakeUnion(check.Select(y => y.Type));
                 }
 
-                result = TypeScheme.Generalize(
-                    env,
-                    new FunctionType(
-                        inputs.Select(x => x.InstantiatePolymorphicTypes(polyDict)),
-                        outputType.InstantiatePolymorphicTypes(polyDict)))
-                                   .Instantiate();
+                foreach (var overload in _overloads.Select(x => x[port]))
+                {
+                    var inputs = new List<IDynamoType>();
+                    var newGuessEnv = guessEnv;
+                    bool success = true;
+                
+                    foreach (int inDataIdx in InPortData.Select((_, i) => i))
+                    {
+                        IDynamoType input;
+                        if (connectedInputTypes.TryGetValue(inDataIdx, out input))
+                        {
+                            var unity = new UnificationResult();
+                            var unification = overload.Inputs[inDataIdx].Unify(input, newGuessEnv, unity);
+                            if (FSharpOption<TypeCheckResult>.get_IsSome(unification))
+                            {
+                                mapPorts.Add(unity.ReductionAmount);
+                                newGuessEnv = unification.Value.GuessEnv;
+                            }
+                            else
+                            {
+                                success = false;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            inputs.Add(GetInputType(inDataIdx));
+                        }
+                    }
+
+                    if (success)
+                    {
+                        overloads.Add((FunctionType)TypeScheme.Generalize(
+                            env,
+                            new FunctionType(
+                                inputs.Select(x => x.InstantiatePolymorphicTypes(polyDict)),
+                                overload.Output.InstantiatePolymorphicTypes(polyDict)))
+                                                              .Instantiate());
+                    }
+                }
+
+                result.Add(new TypeCheckResult
+                {
+                    //TODO: might not need to use function overload type
+                    //      if we end up needing to different guess envs, might be
+                    //      suitable to just add each overload to result
+                    //      (with separate guessEnvs)
+                    Type = new FunctionOverloadType { Overloads = overloads },
+                    GuessEnv = guessEnv
+                });
             }
 
             if (typeDict.ContainsKey(this))
@@ -572,8 +640,13 @@ namespace Dynamo.Nodes
             }
             else
             {
-                List<IDynamoType> outTypes =
-                    Enumerable.Repeat<IDynamoType>(new UnitType(), OutPortData.Count).ToList();
+                //outPorts |> overloads
+                List<List<TypeCheckResult>> outTypes =
+                    Enumerable.Range(0, OutPortData.Count).Select(
+                        _ => Enumerable.Repeat<TypeCheckResult>(
+                                new TypeCheckResult { Type = new UnitType(), GuessEnv = guessEnv }, 
+                                _overloads.Count).ToList())
+                        .ToList();
                 outTypes[port] = result;
                 typeDict[this] = new NodeTypeInformation
                 {
@@ -582,6 +655,8 @@ namespace Dynamo.Nodes
                     MapPorts = mapPorts
                 };
             }
+            
+
             return result;
         }
 
@@ -1387,6 +1462,28 @@ namespace Dynamo.Nodes
             throw new NotImplementedException();
         }
     }
+
+    public enum ElementState
+    {
+        Dead,
+        Active,
+        Error
+    };
+
+    public enum SaveContext { File, Copy };
+
+    public enum LacingStrategy
+    {
+        Disabled,
+        First,
+        Shortest,
+        Longest,
+        CrossProduct
+    };
+
+    public delegate void PortsChangedHandler(object sender, EventArgs e);
+
+    public delegate void DispatchedToUIThreadHandler(object sender, UIDispatcherEventArgs e);
 
     #region class attributes
 

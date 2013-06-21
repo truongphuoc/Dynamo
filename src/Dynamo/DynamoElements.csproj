@@ -132,6 +132,10 @@ limitations under the License.
     <Compile Include="Search\SearchElements\TopSearchElement.cs" />
     <Compile Include="Nodes\dynEquation.cs" />
     <Compile Include="TypeSystem\IDynamoType.cs" />
+    <Compile Include="TypeSystem\NodeTypeInformation.cs" />
+    <Compile Include="TypeSystem\TypeCheckResult.cs" />
+    <Compile Include="TypeSystem\TypeScheme.cs" />
+    <Compile Include="TypeSystem\UnificationResult.cs" />
     <Compile Include="Units.cs" />
     <Compile Include="Utilities\Extensions.cs" />
     <Compile Include="Utilities\MouseClickManager.cs" />

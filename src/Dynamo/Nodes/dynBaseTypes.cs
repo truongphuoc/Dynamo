@@ -2140,27 +2140,24 @@ namespace Dynamo.Nodes
     {
         public dynConditional()
         {
-            var a = new PolymorphicType();
-            //TypeVar b = new PolymorphicType();
+            InPortData.Add(new PortData("test", "Test block", null));
+            InPortData.Add(new PortData("true", "True block", null));
+            InPortData.Add(new PortData("false", "False block", null));
 
-            InPortData.Add(new PortData("test", "Test block", new NumberType()));
-            InPortData.Add(new PortData("true", "True block", a));
-            InPortData.Add(new PortData("false", "False block", a));
-            OutPortData.Add(new PortData("result", "Result", a));
+            OutPortData.Add(new PortData("result", "Result", null));
 
             RegisterAllPorts();
         }
 
-        internal override IDynamoType TypeCheck(
-            int port, FSharpMap<string, TypeScheme> env,
-            Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
+        internal override List<TypeCheckResult> TypeCheck(int port, FSharpMap<string, TypeScheme> env, FSharpMap<GuessType, IDynamoType> guessEnv, Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
         {
             if (!Enumerable.Range(0, InPortData.Count).All(HasInput))
             {
                 Error("All inputs must be connected.");
                 throw new Exception("If Node requires all inputs to be connected.");
             }
-            return base.TypeCheck(port, env, typeDict);
+
+            return base.TypeCheck(port, env, guessEnv, typeDict);
         }
 
         protected internal override INode Build(

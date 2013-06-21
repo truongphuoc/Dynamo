@@ -843,14 +843,13 @@ namespace Dynamo.Utilities
             FSharpMap<string, TypeScheme> typeEnv =
                 MapModule.OfSeq(
                     variables.Select(x => Tuple.Create(x.GUID.ToString(), TypeScheme.Empty())));
-            var typeDict =
-                new Dictionary<dynNodeModel, NodeTypeInformation>();
+            var typeDict = new Dictionary<dynNodeModel, NodeTypeInformation>();
             var outTypes = new List<IDynamoType>();
 
             foreach (dynNodeModel node in functionWorkspace.GetTopMostNodes())
             {
                 foreach (int i in Enumerable.Range(0, node.OutPortData.Count))
-                    node.TypeCheck(i, typeEnv, typeDict);
+                    node.TypeCheck(i, typeEnv, TODO, typeDict);
             }
 
             if (topMost.Count > 1)
@@ -867,8 +866,8 @@ namespace Dynamo.Utilities
                     node.ConnectInput(inputName, new BeginNode());
                     try
                     {
-                    node.ConnectInput(
-                        inputName, topNode.Item2.Build(buildDict, topNode.Item1, typeDict));
+                        node.ConnectInput(
+                            inputName, topNode.Item2.Build(buildDict, topNode.Item1, typeDict));
                     }
                     catch { }
 

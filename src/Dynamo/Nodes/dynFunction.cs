@@ -460,18 +460,21 @@ namespace Dynamo
                 }
             }
 
-            internal override IDynamoType TypeCheck(
-                int port, FSharpMap<string, TypeScheme> env,
+            internal override List<TypeCheckResult> TypeCheck(
+                int port, FSharpMap<string, TypeScheme> env, FSharpMap<GuessType, IDynamoType> guessEnv,
                 Dictionary<dynNodeModel, NodeTypeInformation> typeDict)
             {
                 IDynamoType result = env[GUID.ToString()].Instantiate();
                 typeDict[this] = new NodeTypeInformation
                 {
                     //Inputs = new List<IDynamoType>(),
-                    Outputs = new List<IDynamoType> { result },
+                    Outputs = new List<List<TypeCheckResult>> { new List<TypeCheckResult> { result } },
                     MapPorts = new List<int>()
                 }; 
-                return result;
+                return new List<TypeCheckResult> 
+                {
+                    new TypeCheckResult { Type = result, GuessEnv = guessEnv } 
+                };
             }
 
             public override void SetupCustomUIElements(dynNodeView nodeUI)
