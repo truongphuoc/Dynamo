@@ -80,8 +80,10 @@ namespace Dynamo.Utilities
                         allLoadedAssemblies[assembly.GetName().Name] = assembly;
                         LoadNodesFromAssembly(assembly, searchViewModel, controller);
                     }
-                    catch
+                    catch (Exception e)
                     {
+                        dynSettings.Controller.DynamoViewModel.Log("Failed to load assembly: " + assemblyPath);
+                        dynSettings.Controller.DynamoViewModel.Log(e);
                     }
                 }
             }
@@ -100,7 +102,7 @@ namespace Dynamo.Utilities
         /// <returns>True if the type is node.</returns>
         public static bool IsNodeSubType(Type t)
         {
-            return t.Namespace == "Dynamo.Nodes" &&
+            return /*t.Namespace == "Dynamo.Nodes" &&*/
                    !t.IsAbstract &&
                    t.IsSubclassOf(typeof(dynNodeModel));
         }
