@@ -38,7 +38,20 @@ namespace Dynamo.Nodes
 
         public override bool acceptsListOfLists(FScheme.Value value)
         {
-            return !Utils.IsListOfListsOfLists(value);
+            if (Utils.IsListOfListsOfLists(value))
+                return false;
+
+            FSharpList<Value> vals = ((Value.List)value).Item;
+            if (!vals.Any() || !(vals[0] is Value.List))
+                return true;
+            FSharpList<Value> firstListInList = ((Value.List)vals[0]).Item;
+            if (!firstListInList.Any() || !(firstListInList[0] is Value.Container))
+                return true;
+            var var1 = ((Value.Container)firstListInList[0]).Item;
+            if (var1 is ModelCurveArray)
+                return false;
+
+            return true;
         }
 
         bool matchOrAddFormCurveToReferenceCurveMap(Form formElement, ReferenceArrayArray refArrArr, bool doMatch)
@@ -88,7 +101,9 @@ namespace Dynamo.Nodes
                     ElementId oldRefId = oldRef.ElementId;
                     ElementId newRefId = newRef.ElementId;
 
-                    if (doMatch && sformCurveToReferenceCurveMap[newRefId] != oldRefId)
+                    if (doMatch && (!sformCurveToReferenceCurveMap.ContainsKey(newRefId) ||
+                                    sformCurveToReferenceCurveMap[newRefId] != oldRefId)
+                       )
                     {
                         return false;
                     }
@@ -404,9 +419,9 @@ namespace Dynamo.Nodes
         }
     }
 
-    [NodeName("Planar Ref Curve Chain")]
+    [NodeName("Ref Curve Chain")]
     [NodeCategory(BuiltinNodeCategories.REVIT_BAKE)]
-    [NodeDescription("Creates planar chain of reference curves ")]
+    [NodeDescription("Creates continuous chain of reference curves ")]
     public class dynPlanarRefCurveChain : dynRevitTransactionNodeWithOneOutput
     {
         public dynPlanarRefCurveChain()
@@ -432,8 +447,8 @@ namespace Dynamo.Nodes
 
             ModelCurveArray myModelCurves = new ModelCurveArray();
       
-            Plane thisPlane = null;
-            Line oneLine = null;
+            //Plane thisPlane = null;
+            //Line oneLine = null;
 
             List<ElementId> refIds = new List<ElementId>();
             XYZ loopStart = new XYZ();
@@ -468,6 +483,7 @@ namespace Dynamo.Nodes
                             throw new Exception("Gap between curves in chain of reference curves.");
                     }                 
                 }
+                /* not needed check
                 if (refCurve.GeometryCurve is Line)
                 {
                     Line thisLine = refCurve.GeometryCurve as Line;
@@ -525,18 +541,25 @@ namespace Dynamo.Nodes
                             throw new Exception(" Planar Ref Curve Chain fails: not planar");
                     }
                 }
+                */
 
                 refIds.Add(refCurve.Id);
                 myModelCurves.Append(refCurve);
                 index++;
             }
 
+            List<ElementId> removeIds = new List<ElementId>();
             foreach (ElementId oldId in this.Elements)
             {
                 if (!refIds.Contains(oldId))
                 {
-                    this.Elements.Remove(oldId);
+                    removeIds.Add(oldId);
                 }
+            }
+
+            foreach (ElementId removeId in removeIds)
+            {
+                    this.Elements.Remove(removeId);
             }
             foreach (ElementId newId in refIds)
             {
