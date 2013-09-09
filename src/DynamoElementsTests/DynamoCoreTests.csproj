@@ -60,8 +60,11 @@
   <ItemGroup>
     <Compile Include="CoreTests.cs" />
     <Compile Include="CoreDynTests.cs" />
+    <Compile Include="CustomNodeTests.cs" />
+    <Compile Include="ListTests.cs" />
     <Compile Include="DynamoUnitTest.cs" />
     <Compile Include="ListTests.cs" />
+    <Compile Include="LogicTests.cs" />
     <Compile Include="StringTests.cs" />
     <Compile Include="PackageDependencyTests.cs" />
     <Compile Include="PackageManagerTests.cs" />
@@ -71,6 +74,7 @@
     <Compile Include="TestExtensions.cs" />
     <Compile Include="UnitsOfMeasureTests.cs" />
     <Compile Include="UtilityTests.cs" />
+    <Compile Include="XmlHelperTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DynamoCore\DynamoCore.csproj">

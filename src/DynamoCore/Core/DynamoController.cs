@@ -250,7 +250,7 @@ namespace Dynamo
 
         #endregion
 
-        public void ShutDown()
+        public virtual void ShutDown()
         {
             dynSettings.Controller = null;
             Selection.DynamoSelection.Instance.ClearSelection();
@@ -318,8 +318,7 @@ namespace Dynamo
                 /*
                 AstBuilder builder = new AstBuilder();
                 topMost.CompileToAstNode(builder);
-                string sourceCode = builder.GenerateSourceCode();
-                Console.WriteLine(sourceCode);
+                builder.Execute();
                 */
 
                 topMost.MarkDirty();

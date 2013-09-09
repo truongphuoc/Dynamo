@@ -35,6 +35,7 @@ using Dynamo.Utilities;
 using Dynamo.ViewModels;
 using DynamoCommands = Dynamo.UI.Commands.DynamoCommands;
 using String = System.String;
+using Dynamo.UI.Controls;
 
 namespace Dynamo.Controls
 {
@@ -52,6 +53,9 @@ namespace Dynamo.Controls
 #pragma warning restore 649
         private DynamoViewModel _vm;
         private Stopwatch _timer;
+
+        // Reference to titlebar
+        private TitleBarButtons titleBarButtons;
 
         public bool ConsoleShowing
         {
@@ -91,6 +95,12 @@ namespace Dynamo.Controls
 
         private void dynBench_Activated(object sender, EventArgs e)
         {
+            if (titleBarButtons == null)
+            {
+                titleBarButtons = new TitleBarButtons(this);
+                titleBarButtonsGrid.Children.Add(titleBarButtons);
+            }
+
             this.WorkspaceTabs.SelectedIndex = 0;
             _vm = (DataContext as DynamoViewModel);
             _vm.Model.RequestLayoutUpdate += vm_RequestLayoutUpdate;
@@ -207,14 +217,17 @@ namespace Dynamo.Controls
             if (result == MessageBoxResult.Yes)
             {
                 _vm.ShowSaveDialogIfNeededAndSave(e.Workspace);
+                e.Success = true;
             }
             else if (result == MessageBoxResult.Cancel)
             {
                 //return false;
                 e.Success = false;
             }
-            //return true;
-            e.Success = true;
+            else
+            {
+                e.Success = true;
+            }
         }
 
         void Selection_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -372,21 +385,38 @@ namespace Dynamo.Controls
             e.Success = true;
         }
 
-        private void WindowClosing(object sender, CancelEventArgs  e)
+        private void WindowClosing(object sender, CancelEventArgs e)
         {
             if (_vm.exitInvoked)
                 return;
 
             var res = _vm.AskUserToSaveWorkspacesOrCancel();
             if (!res)
+            {
                 e.Cancel = true;
+                return;
+            }
 
-
+            dynSettings.Controller.ShutDown();
         }
 
         private void WindowClosed(object sender, EventArgs e)
         {
 
+        }
+
+        private void WindowChanged(object sender, EventArgs e)
+        {
+            if (this.WindowState == WindowState.Maximized)
+            {
+                this.mainGrid.Margin = new Thickness(8);
+                titleBarButtons.Max.Tag = "Restore";
+            }
+            else
+            {
+                this.mainGrid.Margin = new Thickness(0);
+                titleBarButtons.Max.Tag = "Max";
+            }           
         }
 
         private void OverlayCanvas_OnMouseMove(object sender, MouseEventArgs e)
