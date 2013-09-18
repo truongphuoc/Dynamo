@@ -274,6 +274,8 @@ namespace Dynamo
 
         public void RunExpression(bool showErrors = true)
         {
+            DynamoLogger.Instance.LogWarning("Running expression", WarningLevel.Mild);
+
             //If we're already running, do nothing.
             if (Running)
                 return;
@@ -337,7 +339,7 @@ namespace Dynamo
 
                     i++;
 
-                    DynamoLogger.Instance.Log(topMost);
+                    //DynamoLogger.Instance.Log(topMost);
                 }
 
                 FScheme.Expression runningExpression = topNode.Compile();
@@ -346,7 +348,7 @@ namespace Dynamo
 
                 // inform any objects that a run has happened
 
-                DynamoLogger.Instance.Log(runningExpression);
+                //DynamoLogger.Instance.Log(runningExpression);
             }
             catch (CancelEvaluationException ex)
             {
@@ -425,8 +427,6 @@ namespace Dynamo
 
             try
             {
-                DynamoLogger.Instance.Log("Evaluating the expression...");
-
                 //Evaluate the expression
                 FScheme.Value expr = FSchemeEnvironment.Evaluate(runningExpression);
 
@@ -435,6 +435,7 @@ namespace Dynamo
                     //Print some more stuff if we're in debug mode
                     if (DynamoViewModel.RunInDebug && expr != null)
                     {
+                        DynamoLogger.Instance.Log("Evaluating the expression...");
                         DynamoLogger.Instance.Log(FScheme.print(expr));
                     }
                 }

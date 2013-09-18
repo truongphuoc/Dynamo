@@ -105,7 +105,7 @@ namespace Dynamo.ViewModels
         protected bool canRunDynamically = true;
         protected bool debug = false;
         protected bool dynamicRun = false;
-        
+
         private bool fullscreenWatchShowing = false;
         private bool canNavigateBackground = false;
 
@@ -114,13 +114,13 @@ namespace Dynamo.ViewModels
         public DelegateCommand WriteToLogCmd { get; set; }
         public DelegateCommand PostUiActivationCommand { get; set; }
         public DelegateCommand AddNoteCommand { get; set; }
-        public DelegateCommand LayoutAllCommand { get; set; }
+        public DelegateCommand UndoCommand { get; set; }
+        public DelegateCommand RedoCommand { get; set; }
         public DelegateCommand CopyCommand { get; set; }
         public DelegateCommand PasteCommand { get; set; }
         public DelegateCommand AddToSelectionCommand { get; set; }
         public DelegateCommand ShowNewFunctionDialogCommand { get; set; }
         public DelegateCommand CreateNodeCommand { get; set; }
-        public DelegateCommand CreateConnectionCommand { get; set; }
         public DelegateCommand ClearCommand { get; set; }
         public DelegateCommand GoHomeCommand { get; set; }
         public DelegateCommand ShowPackageManagerSearchCommand { get; set; }
@@ -159,6 +159,8 @@ namespace Dynamo.ViewModels
         public DelegateCommand PublishSelectedNodesCommand { get; set; }
 
         public DelegateCommand PanCommand { get; set; }
+        public DelegateCommand ZoomInCommand { get; set; }
+        public DelegateCommand ZoomOutCommand { get; set; }
 
         /// <summary>
         /// An observable collection of workspace view models which tracks the model
@@ -392,11 +394,9 @@ namespace Dynamo.ViewModels
             WriteToLogCmd = new DelegateCommand(_model.WriteToLog, _model.CanWriteToLog);
             PostUiActivationCommand = new DelegateCommand(_model.PostUIActivation, _model.CanDoPostUIActivation);
             AddNoteCommand = new DelegateCommand(_model.AddNote, _model.CanAddNote);
-            LayoutAllCommand = new DelegateCommand(_model.LayoutAll, _model.CanLayoutAll);
             AddToSelectionCommand = new DelegateCommand(_model.AddToSelection, _model.CanAddToSelection);
             ShowNewFunctionDialogCommand = new DelegateCommand(_model.ShowNewFunctionDialogAndMakeFunction, _model.CanShowNewFunctionDialogCommand);
             CreateNodeCommand = new DelegateCommand(_model.CreateNode, _model.CanCreateNode);
-            CreateConnectionCommand = new DelegateCommand(_model.CreateConnection, _model.CanCreateConnection);
             ClearCommand = new DelegateCommand(_model.Clear, _model.CanClear);
             GoHomeCommand = new DelegateCommand(GoHomeView, CanGoHomeView);
             SelectAllCommand = new DelegateCommand(SelectAll, CanSelectAll);
@@ -415,6 +415,8 @@ namespace Dynamo.ViewModels
             RefactorCustomNodeCommand = new DelegateCommand(_model.RefactorCustomNode, _model.CanRefactorCustomNode);
             SaveImageCommand = new DelegateCommand(SaveImage, CanSaveImage);
             ShowSaveImageDialogAndSaveResultCommand = new DelegateCommand(ShowSaveImageDialogAndSaveResult, CanShowSaveImageDialogAndSaveResult);
+            UndoCommand = new DelegateCommand(_model.Undo, _model.CanUndo);
+            RedoCommand = new DelegateCommand(_model.Redo, _model.CanRedo);
             CopyCommand = new DelegateCommand(_model.Copy, _model.CanCopy);
             PasteCommand = new DelegateCommand(_model.Paste, _model.CanPaste);
             ToggleConsoleShowingCommand = new DelegateCommand(ToggleConsoleShowing, CanToggleConsoleShowing);
@@ -435,6 +437,8 @@ namespace Dynamo.ViewModels
             SelectNeighborsCommand = new DelegateCommand(SelectNeighbors, CanSelectNeighbors);
             ClearLogCommand = new DelegateCommand(dynSettings.Controller.ClearLog, dynSettings.Controller.CanClearLog);
             PanCommand = new DelegateCommand(Pan, CanPan);
+            ZoomInCommand = new DelegateCommand(ZoomIn, CanZoomIn);
+            ZoomOutCommand = new DelegateCommand(ZoomOut, CanZoomOut);
 
             DynamoLogger.Instance.PropertyChanged += new System.ComponentModel.PropertyChangedEventHandler(Instance_PropertyChanged);
 
@@ -445,6 +449,7 @@ namespace Dynamo.ViewModels
         {
             PublishSelectedNodesCommand.RaiseCanExecuteChanged();
             AlignSelectedCommand.RaiseCanExecuteChanged();
+            DeleteCommand.RaiseCanExecuteChanged();
         }
 
         void Controller_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -464,6 +469,7 @@ namespace Dynamo.ViewModels
             {
                 case "LogText":
                     RaisePropertyChanged("LogText");
+                    RaisePropertyChanged("WarningText");
                     break;
             }
 
@@ -698,7 +704,6 @@ namespace Dynamo.ViewModels
             return new Function(inputs, outputs, functionDefinition);
         }
 
-
         /// <summary>
         ///     Sets the load path
         /// </summary>
@@ -864,12 +869,12 @@ namespace Dynamo.ViewModels
         public void AlignSelected(object param)
         {
             //this.CurrentSpaceViewModel.AlignSelectedCommand.Execute(param);
-            this.CurrentSpaceViewModel.AlignSelected(param.ToString());
+            this.CurrentSpaceViewModel.AlignSelectedCommand.Execute(param.ToString());
         }
 
         internal bool CanAlignSelected(object param)
         {
-            return true;
+            return this.CurrentSpaceViewModel.AlignSelectedCommand.CanExecute(param);
         }
 
         /// <summary>
@@ -1136,6 +1141,26 @@ namespace Dynamo.ViewModels
         internal bool CanPan(object parameter)
         {
             return true;
+        }
+
+        public void ZoomIn(object parameter)
+        {
+            CurrentSpaceViewModel.ZoomInCommand.Execute(parameter);
+        }
+
+        internal bool CanZoomIn(object parameter)
+        {
+            return CurrentSpaceViewModel.ZoomInCommand.CanExecute(parameter);
+        }
+
+        public void ZoomOut(object parameter)
+        {
+            CurrentSpaceViewModel.ZoomOutCommand.Execute(parameter);
+        }
+
+        internal bool CanZoomOut(object parameter)
+        {
+            return CurrentSpaceViewModel.ZoomOutCommand.CanExecute(parameter);
         }
     }
 

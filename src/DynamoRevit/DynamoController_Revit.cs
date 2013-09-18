@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -332,7 +333,7 @@ namespace Dynamo
                     dynRevitSettings.Doc.ShowElements(element);
                 };
 
-                node.Link = id.ToString();
+                node.Link = id.IntegerValue.ToString(CultureInfo.InvariantCulture);
             }
 
             #endregion
@@ -536,7 +537,7 @@ namespace Dynamo
                 //If we don't need to be in the idle thread...
                 if (noIdleThread || Testing)
                 {
-                    DynamoLogger.Instance.Log("Running expression in evaluation thread...");
+                    //DynamoLogger.Instance.Log("Running expression in evaluation thread...");
                     TransMode = TransactionMode.Manual; //Manual transaction control
 
                     if (Testing)
@@ -547,7 +548,7 @@ namespace Dynamo
                 }
                 else //otherwise...
                 {
-                    DynamoLogger.Instance.Log("Running expression in Revit's Idle thread...");
+                    //DynamoLogger.Instance.Log("Running expression in Revit's Idle thread...");
                     TransMode = TransactionMode.Automatic; //Automatic transaction control
 
                     Debug.WriteLine("Adding a run to the idle stack.");

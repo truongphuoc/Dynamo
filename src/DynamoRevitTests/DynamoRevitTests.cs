@@ -2,11 +2,9 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Xml.Serialization;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Dynamo.Models;
-using Dynamo.NUnit.Tests;
 using Dynamo.Nodes;
 using Dynamo.Selection;
 using Dynamo.Utilities;
@@ -566,8 +564,6 @@ namespace DynamoRevitTests
             node.Value = node.Value + .1;
             dynSettings.Controller.RunExpression(true);
             Assert.AreEqual(5, fec.ToElements().Count);
-
-            Assert.AreEqual(id.IntegerValue, fec.ToElements().First().Id.IntegerValue);
         }
 
         [Test]
@@ -602,8 +598,6 @@ namespace DynamoRevitTests
             node.Value = node.Value + .1;
             dynSettings.Controller.RunExpression(true);
             Assert.AreEqual(5, fec.ToElements().Count);
-
-            Assert.AreEqual(id.IntegerValue, fec.ToElements().First().Id.IntegerValue);
         }
 
         [Test]
@@ -1188,6 +1182,93 @@ namespace DynamoRevitTests
             Assert.DoesNotThrow(() => dynSettings.Controller.RunExpression(true));
         }
 
+        [Test]
+        public void MAGN_66()
+        {
+            var model = dynSettings.Controller.DynamoModel;
+
+            string samplePath = Path.Combine(_testPath, @".\MAGN_66.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            model.Open(testPath);
+            Assert.DoesNotThrow(() => dynSettings.Controller.RunExpression(true));
+        }
+        
+        [Test]
+        public void CurvebyPointsArc()
+        {
+            var model = dynSettings.Controller.DynamoModel;
+
+            string samplePath = Path.Combine(_testPath, @".\CurvebyPointsArc.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            model.Open(testPath);
+            Assert.DoesNotThrow(() => dynSettings.Controller.RunExpression(true));
+            
+            FilteredElementCollector fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
+            fec.OfClass(typeof(CurveElement));
+
+            Assert.AreEqual(fec.ToElements().Count(), 1);
+
+            CurveByPoints mc = (CurveByPoints)fec.ToElements().ElementAt(0);
+        }
+        
+        [Test]
+        public void CurvebyPointsEllipse()
+        {
+            var model = dynSettings.Controller.DynamoModel;
+
+            string samplePath = Path.Combine(_testPath, @".\CurvebyPointsEllipse.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            model.Open(testPath);
+            Assert.DoesNotThrow(() => dynSettings.Controller.RunExpression(true));
+            
+            
+            FilteredElementCollector fec = new FilteredElementCollector(dynRevitSettings.Doc.Document);
+            fec.OfClass(typeof(CurveElement));
+
+            Assert.AreEqual(fec.ToElements().Count(), 1);
+
+            CurveByPoints mc = (CurveByPoints)fec.ToElements().ElementAt(0);
+        }
+
+        [Test]
+        public void ModelText()
+        {
+            var model = dynSettings.Controller.DynamoModel;
+
+            string samplePath = Path.Combine(_testPath, @".\ModelText.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            model.Open(testPath);
+            Assert.DoesNotThrow(() => dynSettings.Controller.RunExpression(true));
+        }
+
+        [Test]
+        public void AxonometricView()
+        {
+            var model = dynSettings.Controller.DynamoModel;
+
+            string samplePath = Path.Combine(_testPath, @".\AxonometricView.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            model.Open(testPath);
+            Assert.DoesNotThrow(() => dynSettings.Controller.RunExpression(true));
+        }
+
+        [Test]
+        public void PerspectiveView()
+        {
+            var model = dynSettings.Controller.DynamoModel;
+
+            string samplePath = Path.Combine(_testPath, @".\PerspectiveView.dyn");
+            string testPath = Path.GetFullPath(samplePath);
+
+            model.Open(testPath);
+            Assert.DoesNotThrow(() => dynSettings.Controller.RunExpression(true));
+        }
+
         /// <summary>
         /// Automated creation of regression test cases.
         /// </summary>
@@ -1360,34 +1441,6 @@ namespace DynamoRevitTests
 
                 _trans.Commit();
             }
-        }
-    }
-
-    [TestFixture]
-    internal class DynamoRevitUnitTests
-    {
-        [Test]
-        public void CanWriteNUnitStyleResults()
-        {
-            //read the existing results and add to them
-            var resultPath = Path.GetTempFileName();
-
-            //create one result to dump everything into
-            var result = new resultType();
-            result.name = Assembly.GetExecutingAssembly().Location;
-            result.total = 0;
-            result.failures = 0;
-            result.notrun = 0;
-            result.testsuite = new testsuiteType();
-
-            //write to the file
-            var x = new XmlSerializer(typeof(resultType));
-            using (var tw = new StreamWriter(resultPath))
-            {
-                x.Serialize(tw, result);
-            }
-
-            Assert.IsTrue(File.Exists(resultPath));
         }
     }
 }
